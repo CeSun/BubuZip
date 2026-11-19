@@ -10,7 +10,7 @@ using ICSharpCode.SharpZipLib.Zip;
 
 namespace EclipseArchive.Core;
 
-public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigurableArchiveEngine
+public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigurableArchiveEngine
 {
     public Task CreateAsync(
         Stream destination,
@@ -36,7 +36,7 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
                 throw new ArgumentException("The destination stream must be writable.", nameof(destination));
             if (destination.CanSeek && (destination.Position != 0 || destination.Length != 0))
                 throw new ArgumentException("The destination stream must be empty and positioned at zero.", nameof(destination));
-            if (format is not (ArchiveFormat.Zip or ArchiveFormat.SevenZip))
+            if (!Enum.IsDefined(format))
                 throw new ArgumentOutOfRangeException(nameof(format));
             if (format == ArchiveFormat.SevenZip && !destination.CanSeek)
                 throw new ArgumentException("7z requires a seekable destination stream.", nameof(destination));
@@ -48,6 +48,8 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
                 throw new NotSupportedException("7z 暂不支持仅存储模式。");
             if (format == ArchiveFormat.Zip && password is not null && settings.ZipEncryption == ZipEncryptionMethod.ZipCrypto && password.Any(character => character > 0x7f))
                 throw new ArgumentException("ZipCrypto 密码仅支持 ASCII 字符；使用中文密码请选择 AES-256。", nameof(password));
+            if (password is not null && format is not (ArchiveFormat.Zip or ArchiveFormat.SevenZip))
+                throw new NotSupportedException("所选格式不支持密码保护。");
             if (encryptFileNames && (format != ArchiveFormat.SevenZip || password is null))
                 throw new ArgumentException("Hiding filenames requires a password-protected 7z archive.", nameof(encryptFileNames));
 
@@ -66,6 +68,12 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
                 return entry with { EntryPath = name };
             }).ToArray();
 
+            if (format is not (ArchiveFormat.Zip or ArchiveFormat.SevenZip))
+            {
+                await WriteAdditionalFormatAsync(destination, inputs, format, settings, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
+            }
             if (format == ArchiveFormat.Zip && password is not null)
             {
                 await WriteEncryptedZipAsync(destination, inputs, password, settings, cancellationToken).ConfigureAwait(false);
@@ -150,6 +158,9 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
         return Task.Run<IReadOnlyList<ArchiveEntryInfo>>(async () =>
         {
             ValidateArchiveSource(source);
+            var detection = await DetectAsync(source, password, cancellationToken).ConfigureAwait(false);
+            if (detection.ReaderOnly) return await ListSequentialAsync(source, password, cancellationToken).ConfigureAwait(false);
+            if (detection.RawCompression is { } raw) return await ListRawAsync(source, raw, cancellationToken).ConfigureAwait(false);
             await using var archive = await ArchiveFactory.OpenAsyncArchive(
                 source, ReadOptions(password), cancellationToken).ConfigureAwait(false);
             var entries = new List<ArchiveEntryInfo>();
@@ -157,7 +168,7 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var attributes = ReadAttributes(entry);
-                entries.Add(new ArchiveEntryInfo(entry.Key ?? "", entry.Size, entry.IsDirectory, entry.IsEncrypted,
+                entries.Add(new ArchiveEntryInfo(EntryName(entry, archive.Type, source), entry.Size, entry.IsDirectory, entry.IsEncrypted,
                     entry.LinkTarget, entry.LastModifiedTime, entry.CompressedSize,
                     entry.LinkTarget is not null || archive.Type == ArchiveType.Zip && attributes is int flags &&
                         ((unchecked((uint)flags) >> 16) & 0xF000u) == 0xA000u, attributes));
@@ -183,12 +194,15 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
             if (ReferenceEquals(source, destination))
                 throw new ArgumentException("Source and destination streams must be different.", nameof(destination));
             var name = NormalizeEntryPath(entryPath);
+            var detection = await DetectAsync(source, password, cancellationToken).ConfigureAwait(false);
+            if (detection.ReaderOnly) { await ExtractSequentialAsync(source, [new(name, () => new NonClosingStream(destination))], password, null, detection.OuterCompression, cancellationToken).ConfigureAwait(false); return; }
+            if (detection.RawCompression is { } raw) { await ExtractRawAsync(source, name, destination, raw, cancellationToken).ConfigureAwait(false); return; }
 
             await using var archive = await ArchiveFactory.OpenAsyncArchive(
                 source, ReadOptions(password), cancellationToken).ConfigureAwait(false);
             await foreach (var entry in archive.EntriesAsync.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                if (!Matches(entry, name))
+                if (!string.Equals(EntryName(entry, archive.Type, source).Replace('\\', '/').TrimEnd('/'), name, StringComparison.Ordinal))
                     continue;
                 if (entry.IsDirectory)
                     throw new InvalidOperationException("A directory has no file content to extract.");
@@ -223,13 +237,23 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
                     throw new ArgumentException($"Duplicate extraction target: {name}", nameof(targets));
             }
             if (requested.Count == 0) return;
+            var detection = await DetectAsync(source, password, cancellationToken).ConfigureAwait(false);
+            if (detection.ReaderOnly) { await ExtractSequentialAsync(source, requested.Values.ToArray(), password, entryCompleted, detection.OuterCompression, cancellationToken).ConfigureAwait(false); return; }
+            if (detection.RawCompression is { } raw)
+            {
+                var rawName = SingleEntryName(source);
+                if (requested.Count != 1 || !requested.TryGetValue(rawName, out var target)) throw new FileNotFoundException("Archive entry was not found.");
+                await using (var output = OpenDestination(target, source)) await ExtractRawAsync(source, rawName, output, raw, cancellationToken).ConfigureAwait(false);
+                entryCompleted?.Invoke(rawName);
+                return;
+            }
 
             await using var archive = await ArchiveFactory.OpenAsyncArchive(
                 source, ReadOptions(password), cancellationToken).ConfigureAwait(false);
             var metadata = new Dictionary<string, IArchiveEntry>(StringComparer.Ordinal);
             await foreach (var entry in archive.EntriesAsync.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                var name = NormalizeEntryPath(entry.Key ?? "");
+                var name = NormalizeEntryPath(EntryName(entry, archive.Type, source));
                 if (!metadata.TryAdd(name, entry))
                     throw new InvalidDataException($"Duplicate archive entry: {name}");
             }
@@ -356,9 +380,6 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigura
         }
         finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
     }
-
-    private static bool Matches(IEntry entry, string name) =>
-        string.Equals(entry.Key?.Replace('\\', '/').TrimEnd('/'), name, StringComparison.Ordinal);
 
     private static int? ReadAttributes(IEntry entry)
     {

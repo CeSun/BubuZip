@@ -4,6 +4,15 @@ public enum ArchiveFormat
 {
     Zip,
     SevenZip,
+    Tar,
+    TarGZip,
+    TarBZip2,
+    TarLZip,
+    TarZStandard,
+    GZip,
+    BZip2,
+    LZip,
+    ZStandard,
 }
 
 public enum ArchiveCompressionLevel { Store = 0, Fastest = 1, Fast = 3, Normal = 5, Maximum = 7, Ultra = 9 }

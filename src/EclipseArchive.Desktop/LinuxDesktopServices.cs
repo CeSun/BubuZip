@@ -18,7 +18,7 @@ public sealed class LinuxDesktopServices : IDesktopServices, IAsyncDesktopDialog
         return Choose(["--file-selection", "--multiple", "--separator=" + Separator, "--title=选择要压缩的文件"]);
     }
     public string? ChooseArchive() => Choose(["--file-selection", "--title=打开压缩包",
-        "--file-filter=压缩文件 | *.zip *.7z *.rar *.tar *.gz *.tgz *.bz2 *.xz *.lz *.zst",
+        "--file-filter=压缩文件 | *.zip *.zipx *.7z *.rar *.tar *.gz *.gzip *.tgz *.bz2 *.bzip2 *.tbz *.tbz2 *.xz *.txz *.lz *.lzip *.tlz *.zst *.zstd *.tzst *.z *.taz *.arc *.arj *.ace",
         "--file-filter=所有文件 | *"]).FirstOrDefault();
     public string? ChooseFolder(string? initialDirectory = null)
     {

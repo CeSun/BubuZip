@@ -11,10 +11,13 @@
 - “新建压缩”通过系统选择器添加源文件或文件夹并设置输出路径；“打开压缩”先选择压缩包，再显示其内容。
 - 归档浏览器提供添加、提取、测试、复制、删除、信息和返回首页；支持排序、多选、双击或 Enter 打开归档中的项目。选择其他压缩包可使用“打开压缩包…”或 Cmd/Ctrl+O。
 - 归档路径为只读；上一级、Backspace 和历史导航可在嵌套压缩包之间返回，在最外层归档根目录无法继续进入系统文件夹。返回首页会清除当前归档与导航历史。
-- ZIP/7z 可选择压缩级别和密码；ZIP 支持 AES-256 或 ZipCrypto（密码限 ASCII），7z 可加密文件名。提取支持完整路径、相对于当前目录和不包含目录三种模式，并可批量校验归档。
-- 解压成功后自动在系统文件管理器中打开输出目录，应用内继续停留在当前压缩包；解压失败或取消时不会打开目录。
+- 创建支持 ZIP、7z、TAR、TAR.GZ、TAR.BZ2、TAR.LZ、TAR.ZST，以及单文件 GZ、BZ2、LZ、ZST。ZIP/7z 可设置密码；ZIP 支持 AES-256 或 ZipCrypto（密码限 ASCII），7z 可加密文件名。
+- 读取支持 ZIP、7z、RAR、TAR 及 GZip/BZip2/XZ/LZip/Zstandard/LZW 包装的 TAR，单文件 GZ、BZ2、XZ、LZ、ZST、`.Z`，以及 SharpCompress 支持的 ARC、ARJ、ACE 子集。提取支持完整路径、相对于当前目录和不包含目录三种模式。
+- 压缩和解压成功后保留 100% 进度窗口，可确认关闭或打开输出文件夹。解压成功后仍会自动在系统文件管理器中打开输出目录，应用内继续停留在当前压缩包；失败或取消时不显示成功状态。
 - ZIP/7z 内部添加文件、删除条目和 F2 重命名；支持子目录添加、目录合并和明确选择后替换同名文件。
 - 后台操作、按条目更新的进度与取消；文件/文件夹选择、保存面板，以及信息和确认对话框。
+
+单文件 GZ、BZ2、LZ、ZST 创建只能选择一个文件；文件夹或多个文件请使用对应的 TAR 组合格式。单文件格式可能根据压缩包文件名恢复条目名；GZ 的非 ASCII 名称也采用此方式，重命名压缩包会影响恢复的文件名。TAR.XZ 和 TAR.Z 仅支持读取。当前工作流不支持多卷归档；ACE 仅支持未压缩条目，ARC/ARJ 的可用压缩方法受 SharpCompress 限制，部分 ARC 条目的大小可能显示为零。
 
 嵌套压缩包使用临时副本进行只读浏览；如需修改，请先提取。临时副本在返回首页、切换外层归档或关闭应用时清理。
 
@@ -117,7 +120,7 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contain
 
 | 接口 | 用途 |
 |---|---|
-| `CreateAsync` | 将 `ArchiveWriteEntry` 列表写入输出流，支持 ZIP 和 7z |
+| `CreateAsync` | 将 `ArchiveWriteEntry` 列表写入 ZIP、7z、TAR 组合或单文件压缩流 |
 | `ListAsync` | 从输入流读取归档条目列表，可提供密码 |
 | `ExtractEntryAsync` | 按条目路径读取归档内容并写入调用者提供的输出流，可提供密码 |
 
@@ -125,7 +128,7 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contain
 
 `ArchiveWriteEntry` 包含归档内路径、内容流和可选修改时间；`Content = null` 表示目录。所有调用者提供的流均保持打开。创建归档需要空输出流；列目录与提取需要从归档起点读取，调用者在复用流时应自行设置 `Position = 0`。操作在后台执行并接受 `CancellationToken`；失败或取消后应丢弃不完整输出。
 
-7z 使用 LZMA2 非固实写入，压缩级别映射到字典和快字节参数，支持密码和 `encryptFileNames` 文件名隐藏。ZIP 支持存储和 Deflate 压缩，以及 AES-256 或 ZipCrypto 加密；为保持读取兼容，ZipCrypto 创建时的密码仅支持 ASCII。输入归档的密码通过列目录与提取接口传入。展平路径后若出现同名冲突，提取会拒绝执行。
+7z 使用 LZMA2 非固实写入，压缩级别映射到字典和快字节参数，支持密码和 `encryptFileNames` 文件名隐藏。ZIP 支持存储和 Deflate 压缩，以及 AES-256 或 ZipCrypto 加密；为保持读取兼容，ZipCrypto 创建时的密码仅支持 ASCII。输入归档的密码通过列目录与提取接口传入。TAR 写入需要可定位且位于开头的文件输入流；GZ、BZ2、LZ、ZST 只接受一个文件。TAR 组合格式通过顺序读取，外层压缩流先完整校验；展平路径后若出现同名冲突，提取会拒绝执行。
 
 流式引擎只读写调用者提供的流；同项目中的 `ArchiveFileService` 负责实际磁盘文件枚举、创建、提取、读取测试、路径预检、临时输出和提交，`ArchiveEditService` 负责原包修改。UI 调用文件服务并显示操作状态。版本及接口边界见 [架构说明](docs/architecture.md)。
 

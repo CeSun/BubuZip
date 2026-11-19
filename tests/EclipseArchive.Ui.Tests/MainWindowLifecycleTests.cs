@@ -65,8 +65,11 @@ public sealed class MainWindowLifecycleTests
         using var extracted = new MemoryStream();
         fixture.Engine.ExtractEntryAsync(archive, "提交.txt", extracted).GetAwaiter().GetResult();
         Assert.Equal(text, Encoding.UTF8.GetString(extracted.ToArray()));
-        Assert.Empty(fixture.Elements<ProgressBar>());
+        Assert.Equal(100, Assert.Single(fixture.Elements<ProgressBar>()).Value);
+        Assert.Contains("操作成功", fixture.Texts());
         Assert.DoesNotContain("操作已取消", fixture.Texts());
+        fixture.Click("确认");
+        Assert.Empty(fixture.Elements<ProgressBar>());
     }
 
     [Fact]
@@ -87,6 +90,8 @@ public sealed class MainWindowLifecycleTests
         Assert.Empty(fixture.Desktop.OpenedPaths);
         Assert.False(Directory.Exists(Path.Combine(fixture.DirectoryPath, "archive")));
         Assert.Equal("操作已取消", fixture.Window.StatusMessage);
+        Assert.DoesNotContain("操作成功", fixture.Texts());
+        Assert.DoesNotContain(fixture.Elements<Button>(), button => button.Label == "打开文件夹" && button.IsEffectivelyVisible);
         Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
     }
 

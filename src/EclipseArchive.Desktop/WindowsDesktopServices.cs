@@ -62,7 +62,7 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
             $dialog.Title = if ($mode -eq 'files') { '选择要压缩的文件' } else { '打开压缩包' }
             $dialog.Multiselect = $mode -eq 'files'
             if ($mode -eq 'archive') {
-                $dialog.Filter = '压缩文件|*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.xz;*.lz;*.zst|所有文件|*.*'
+                $dialog.Filter = '压缩文件|*.zip;*.zipx;*.7z;*.rar;*.tar;*.gz;*.gzip;*.tgz;*.bz2;*.bzip2;*.tbz;*.tbz2;*.xz;*.txz;*.lz;*.lzip;*.tlz;*.zst;*.zstd;*.tzst;*.z;*.taz;*.arc;*.arj;*.ace|所有文件|*.*'
             }
             if ((Show-Picker $dialog) -ne 'OK') { exit 1 }
             $paths = @($dialog.FileNames)

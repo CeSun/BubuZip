@@ -27,7 +27,7 @@ public sealed record BrowserSnapshot(
 public sealed class BrowserService(IArchiveEngine engine)
 {
     private static readonly HashSet<string> ArchiveExtensions = new(StringComparer.OrdinalIgnoreCase)
-        { ".zip", ".7z", ".rar", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".lz", ".zst" };
+        { ".zip", ".zipx", ".7z", ".rar", ".tar", ".gz", ".gzip", ".tgz", ".bz2", ".bzip2", ".tbz", ".tbz2", ".xz", ".txz", ".lz", ".lzip", ".tlz", ".zst", ".zstd", ".tzst", ".z", ".taz", ".arc", ".arj", ".ace" };
 
     public static bool IsArchiveFile(string path) => ArchiveExtensions.Contains(System.IO.Path.GetExtension(path));
 

@@ -124,10 +124,15 @@
                                 <TextBlock>压缩格式</TextBlock>
                                 <ComboBox Grid.Column="1" ItemsSource={_formatNames} @bind-SelectedIndex={FormatIndex} />
                             </ArchiveSurface>
-                            <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
-                                <TextBlock>压缩级别</TextBlock>
-                                <ComboBox Grid.Column="1" ItemsSource={CompressionLevelNames} @bind-SelectedIndex={_compressionLevelIndex} />
-                            </ArchiveSurface>
+                            @if (HasCompressionLevel) {
+                                <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
+                                    <TextBlock>压缩级别</TextBlock>
+                                    <ComboBox Grid.Column="1" ItemsSource={CompressionLevelNames} @bind-SelectedIndex={_compressionLevelIndex} />
+                                </ArchiveSurface>
+                            }
+                            @if (SingleFileFormat) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">此格式只能压缩一个文件；多个文件或文件夹请选择 TAR 组合格式。恢复的文件名可能由压缩包名称决定。</TextBlock>
+                            }
                             @if (_formatIndex == 0) {
                                 <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
                                     <TextBlock>加密方式</TextBlock>
@@ -162,11 +167,11 @@
                                 <Button Grid.Column="1" OnClick={ChooseDestination}>浏览…</Button>
                             </ArchiveSurface>
                         }
-                        @if (_panel == DialogKind.Unlock || _panel == DialogKind.EntryPassword || _panel == DialogKind.Extract || _panel == DialogKind.Test || _panel == DialogKind.Create || IsArchiveEditDialog) {
+                        @if (_panel == DialogKind.Unlock || _panel == DialogKind.EntryPassword || _panel == DialogKind.Extract || _panel == DialogKind.Test || _panel == DialogKind.Create && CanEncryptNewArchive || IsArchiveEditDialog) {
                             <TextBlock>密码（无密码可留空）</TextBlock>
                             <PasswordBox @bind-Text={_password} />
                         }
-                        @if (_panel == DialogKind.Create) {
+                        @if (_panel == DialogKind.Create && CanEncryptNewArchive) {
                             <TextBlock>确认密码</TextBlock>
                             <PasswordBox @bind-Text={_passwordConfirm} />
                         }
@@ -185,9 +190,10 @@
                         }
                     </StackPanel>
                     </ScrollViewer>
-                    <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,96,8,96" Padding="16" Style="Background: theme(#242424, #F0F0F0)">
+                    <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,120,8,96" Padding="16" Style="Background: theme(#242424, #F0F0F0)">
                         <Button Grid.Column="1" IsVisible={_panel != DialogKind.Progress && _panel != DialogKind.Options && _panel != DialogKind.Message && _panel != DialogKind.None} OnClick={ConfirmDialog} IsEnabled={!_busy}>{DialogConfirmLabel}</Button>
-                        <Button Grid.Column="3" Ref={DialogDismissButton} OnClick={DismissDialog} IsEnabled={_panel != DialogKind.Progress || !_cancelRequested}>{_panel is DialogKind.Options or DialogKind.Message ? "关闭" : "取消"}</Button>
+                        <Button Grid.Column="1" IsVisible={_panel == DialogKind.Progress && _operationSucceeded} OnClick={OpenResultFolder} IsEnabled={!_busy}>打开文件夹</Button>
+                        <Button Grid.Column="3" Ref={DialogDismissButton} OnClick={DismissDialog} IsEnabled={_panel != DialogKind.Progress || _operationSucceeded || !_cancelRequested}>{_operationSucceeded && _panel == DialogKind.Progress ? "确认" : _panel is DialogKind.Options or DialogKind.Message ? "关闭" : "取消"}</Button>
                     </ArchiveSurface>
                 </ArchiveSurface>
             </ArchiveDialogBorder>

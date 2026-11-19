@@ -42,13 +42,20 @@ public partial class MainWindow
     private string? _nestedWorkspace, _rootArchivePath;
     private bool InNestedArchive => _snapshot?.ArchivePath is { } path && _nestedArchives.ContainsKey(path);
     private string OperationArchiveName => _nestedArchives.TryGetValue(_operationArchive, out var nested) ? nested.Name : Path.GetFileName(_operationArchive);
-    private readonly string[] _formatNames = ["ZIP", "7z"];
+    private static readonly ArchiveFormat[] Formats = [ArchiveFormat.Zip, ArchiveFormat.SevenZip, ArchiveFormat.Tar, ArchiveFormat.TarGZip, ArchiveFormat.TarBZip2, ArchiveFormat.TarLZip, ArchiveFormat.TarZStandard, ArchiveFormat.GZip, ArchiveFormat.BZip2, ArchiveFormat.LZip, ArchiveFormat.ZStandard];
+    private static readonly string[] FormatExtensions = [".zip", ".7z", ".tar", ".tar.gz", ".tar.bz2", ".tar.lz", ".tar.zst", ".gz", ".bz2", ".lz", ".zst"];
+    private readonly string[] _formatNames = ["ZIP", "7z", "TAR", "TAR.GZ", "TAR.BZ2", "TAR.LZ", "TAR.ZST", "GZ（单文件）", "BZ2（单文件）", "LZ（单文件）", "ZST（单文件）"];
+    private ArchiveFormat SelectedFormat => Formats[Math.Clamp(_formatIndex, 0, Formats.Length - 1)];
+    private string SelectedExtension => FormatExtensions[Math.Clamp(_formatIndex, 0, FormatExtensions.Length - 1)];
+    private bool SingleFileFormat => SelectedFormat is ArchiveFormat.GZip or ArchiveFormat.BZip2 or ArchiveFormat.LZip or ArchiveFormat.ZStandard;
+    private bool HasCompressionLevel => SelectedFormat is ArchiveFormat.Zip or ArchiveFormat.SevenZip or ArchiveFormat.TarGZip or ArchiveFormat.GZip;
+    private bool CanEncryptNewArchive => SelectedFormat is ArchiveFormat.Zip or ArchiveFormat.SevenZip;
     private readonly string[] _zipLevels = ["存储", "最快", "快速", "标准", "最大", "极限"];
     private readonly string[] _sevenZipLevels = ["最快", "快速", "标准", "最大", "极限"];
     private readonly string[] _zipEncryptionNames = ["AES-256", "ZipCrypto（兼容旧软件）"];
     private readonly string[] _extractPathNames = ["完整路径", "相对于当前目录", "不包含目录"];
     private static readonly ArchiveCompressionLevel[] Levels = [ArchiveCompressionLevel.Store, ArchiveCompressionLevel.Fastest, ArchiveCompressionLevel.Fast, ArchiveCompressionLevel.Normal, ArchiveCompressionLevel.Maximum, ArchiveCompressionLevel.Ultra];
-    private string[] CompressionLevelNames => _formatIndex == 0 ? _zipLevels : _sevenZipLevels;
+    private string[] CompressionLevelNames => SelectedFormat == ArchiveFormat.SevenZip ? _sevenZipLevels : _zipLevels;
     private int _compressionLevelIndex = 3, _zipEncryptionIndex, _extractPathIndex = 1;
     private string _passwordConfirm = "";
     private string[] _sources = [];
@@ -59,7 +66,8 @@ public partial class MainWindow
     private bool _replaceExisting;
     private string? _archivePassword { get => ActivePane.Password; set => ActivePane.Password = value; }
     private string _operationArchive = "", _destination = "", _suggestedDestination = "", _password = "", _error = "", _dialogError = "";
-    private string _progressText = "", _lastClick = "";
+    private string _progressText = "", _lastClick = "", _resultPath = "", _resultFolder = "";
+    private bool _operationSucceeded;
     private string _messageTitle = "", _messageBody = "";
     private string _sortColumn { get => ActivePane.SortColumn; set => ActivePane.SortColumn = value; }
     private long _lastClickTime;
@@ -71,15 +79,16 @@ public partial class MainWindow
         get => _formatIndex;
         set
         {
+            if (value < 0 || value >= Formats.Length || value == _formatIndex) return;
             var wasSuggested = _destination == _suggestedDestination;
             _formatIndex = value;
             if (_panel == DialogKind.Create && _destination.Length > 0)
             {
-                _destination = Path.ChangeExtension(_destination, value == 1 ? ".7z" : ".zip");
+                _destination = wasSuggested && _sources.Length > 0 ? SuggestDestination() : WithArchiveExtension(_destination, SelectedExtension);
                 if (wasSuggested) _suggestedDestination = _destination;
             }
-            if (value == 0) _encryptNames = false;
-            _compressionLevelIndex = value == 0 ? 3 : 2;
+            if (SelectedFormat != ArchiveFormat.SevenZip) _encryptNames = false;
+            _compressionLevelIndex = SelectedFormat == ArchiveFormat.SevenZip ? 2 : 3;
             Invalidate();
         }
     }
@@ -107,7 +116,7 @@ public partial class MainWindow
     private string DialogTitle => _panel switch
     {
         DialogKind.Create => "添加到压缩包", DialogKind.Extract => "提取文件", DialogKind.Test => "测试压缩包",
-        DialogKind.Unlock => "打开压缩包", DialogKind.EntryPassword => "打开加密文件", DialogKind.Progress => "正在处理",
+        DialogKind.Unlock => "打开压缩包", DialogKind.EntryPassword => "打开加密文件", DialogKind.Progress => _operationSucceeded ? "操作成功" : "正在处理",
         DialogKind.AddToArchive => "添加到当前压缩包", DialogKind.DeleteEntries => "从压缩包删除", DialogKind.Rename => "重命名",
         DialogKind.Options => "选项",
         DialogKind.Message => _messageTitle,
@@ -120,7 +129,7 @@ public partial class MainWindow
         DialogKind.Test => OperationArchiveName + " · 读取所有文件，检查内容是否可以完整解压。",
         DialogKind.Unlock => OperationArchiveName + " · 此压缩包可能需要密码。",
         DialogKind.EntryPassword => (_passwordEntry?.Name ?? "") + " · 请输入文件密码。",
-        DialogKind.Progress => _cancelRequested ? "正在取消，请稍候…" : "操作完成前请保持应用打开。",
+        DialogKind.Progress => _operationSucceeded ? "输出位置：" + _resultPath : _cancelRequested ? "正在取消，请稍候…" : "操作完成前请保持应用打开。",
         DialogKind.AddToArchive => Path.GetFileName(_operationArchive) + "!/" + _editDirectory,
         DialogKind.DeleteEntries => $"将从 {Path.GetFileName(_operationArchive)} 中删除所选 {_editEntries.Length} 个项目及其内容。",
         DialogKind.Rename => _editEntries.FirstOrDefault() ?? "",
@@ -247,7 +256,11 @@ public partial class MainWindow
     {
         var parent = _snapshot!;
         var workspace = _nestedWorkspace ??= Directory.CreateTempSubdirectory("EclipseArchive-nested-").FullName;
-        var target = Path.Combine(workspace, Guid.NewGuid().ToString("N") + Path.GetExtension(item.Name));
+        var folder = Path.Combine(workspace, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        var safeName = item.Name is "." or ".." || item.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            ? "archive" + Path.GetExtension(item.Name) : item.Name;
+        var target = Path.Combine(folder, safeName);
         var opened = await RunOperationAsync(async token =>
         {
             try
@@ -461,17 +474,31 @@ public partial class MainWindow
             _sources = _sources.Concat(paths).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
             if (_panel == DialogKind.Create && _destination == _suggestedDestination)
             {
-                var first = Path.GetFullPath(_sources[0]);
-                var folder = Path.GetDirectoryName(first) ?? InitialPath;
-                var name = _sources.Length == 1
-                    ? Directory.Exists(first) ? Path.GetFileName(first.TrimEnd(Path.DirectorySeparatorChar)) : Path.GetFileNameWithoutExtension(first)
-                    : "Archive";
-                _destination = _suggestedDestination = UniqueDestination(folder, name, _formatIndex == 1 ? ".7z" : ".zip");
+                _destination = _suggestedDestination = SuggestDestination();
             }
             Invalidate();
         }
         catch (Exception error) { if (!_disposed) { _dialogError = FriendlyError(error); Invalidate(); } }
     }
+    private string SuggestDestination()
+    {
+        var first = Path.GetFullPath(_sources[0]);
+        var folder = Path.GetDirectoryName(first) ?? InitialPath;
+        var name = _sources.Length == 1
+            ? Directory.Exists(first) ? Path.GetFileName(Path.TrimEndingDirectorySeparator(first))
+                : SingleFileFormat ? Path.GetFileName(first) : Path.GetFileNameWithoutExtension(first)
+            : "Archive";
+        return UniqueDestination(folder, name, SelectedExtension);
+    }
+
+    private static string WithArchiveExtension(string path, string extension)
+    {
+        if (path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return path;
+        foreach (var existing in FormatExtensions.OrderByDescending(value => value.Length))
+            if (path.EndsWith(existing, StringComparison.OrdinalIgnoreCase)) return path[..^existing.Length] + extension;
+        return Path.ChangeExtension(path, extension);
+    }
+
     private void ClearCreateInputs()
     {
         _sources = [];
@@ -504,7 +531,7 @@ public partial class MainWindow
         {
             if (_panel == DialogKind.Create)
             {
-                var suggested = Path.ChangeExtension(Path.GetFileName(_destination), _formatIndex == 1 ? ".7z" : ".zip");
+                var suggested = WithArchiveExtension(Path.GetFileName(_destination), SelectedExtension);
                 var directory = Path.GetDirectoryName(_destination);
                 var path = await ShowPickerAsync(() => Desktop.ChooseSavePath(suggested, directory));
                 if (_disposed) return;
@@ -521,8 +548,20 @@ public partial class MainWindow
         }
         catch (Exception error) { if (!_disposed) { _dialogError = FriendlyError(error); Invalidate(); } }
     }
-    private void CloseDialog() { if (!_busy && !_pickerBusy) { _panel = DialogKind.None; _password = ""; _passwordConfirm = ""; _dialogError = ""; Invalidate(); } }
-    private void DismissDialog() { if (_panel == DialogKind.Progress) CancelOperation(); else CloseDialog(); }
+    private void CloseDialog()
+    {
+        if (_busy || _pickerBusy) return;
+        _panel = DialogKind.None; _operationSucceeded = false; _resultPath = ""; _resultFolder = "";
+        _password = ""; _passwordConfirm = ""; _dialogError = ""; Invalidate();
+    }
+    private void DismissDialog() { if (_panel == DialogKind.Progress && _busy) CancelOperation(); else CloseDialog(); }
+    private void OpenResultFolder()
+    {
+        if (_busy || !_operationSucceeded || _resultFolder.Length == 0) return;
+        try { Desktop.Open(_resultFolder); _dialogError = ""; }
+        catch (Exception error) { _dialogError = "无法打开输出文件夹：" + FriendlyError(error); }
+        Invalidate();
+    }
     private async void ConfirmDialog()
     {
         if (_busy || _pickerBusy || _panel is DialogKind.None or DialogKind.Progress) return;
@@ -542,17 +581,19 @@ public partial class MainWindow
             }
             if (mode is DialogKind.Create or DialogKind.AddToArchive && _sources.Length == 0)
                 throw new InvalidOperationException("请先选择要压缩的文件或文件夹。");
-            if (mode == DialogKind.Create && _password != _passwordConfirm)
+            if (mode == DialogKind.Create && CanEncryptNewArchive && _password != _passwordConfirm)
                 throw new InvalidOperationException("两次输入的密码不一致。");
             if (mode == DialogKind.Create && _formatIndex == 1 && _encryptNames && PasswordOrNull is null)
                 throw new InvalidOperationException("加密文件名需要先设置密码。");
             if (mode is DialogKind.Create or DialogKind.Extract && string.IsNullOrWhiteSpace(_destination)) throw new InvalidOperationException("请选择输出路径。");
-            var password = PasswordOrNull;
-            var createSettings = new ArchiveCreateSettings(Levels[_compressionLevelIndex + (_formatIndex == 1 ? 1 : 0)],
+            var password = mode == DialogKind.Create && !CanEncryptNewArchive ? null : PasswordOrNull;
+            var createSettings = new ArchiveCreateSettings(mode == DialogKind.Create && HasCompressionLevel && _compressionLevelIndex >= 0
+                ? Levels[Math.Clamp(_compressionLevelIndex + (SelectedFormat == ArchiveFormat.SevenZip ? 1 : 0), 0, Levels.Length - 1)]
+                : ArchiveCompressionLevel.Normal,
                 _zipEncryptionIndex == 1 ? ZipEncryptionMethod.ZipCrypto : ZipEncryptionMethod.Aes256);
             var extractSettings = new ArchiveExtractSettings((ExtractionPathMode)_extractPathIndex, _snapshot?.ArchivePrefix ?? "");
             var destination = mode is DialogKind.Create or DialogKind.Extract ? Path.GetFullPath(_destination) : "";
-            if (mode == DialogKind.Create) destination = Path.ChangeExtension(destination, _formatIndex == 1 ? ".7z" : ".zip");
+            if (mode == DialogKind.Create) destination = WithArchiveExtension(destination, SelectedExtension);
             var progress = new Progress<ArchiveOperationProgress>(report =>
             {
                 if (_disposed || !_busy || _panel != DialogKind.Progress) return;
@@ -562,7 +603,7 @@ public partial class MainWindow
             var completed = await RunOperationAsync(async token =>
             {
                 if (mode == DialogKind.Create) await FileService.CreateAsync(_sources, destination,
-                    _formatIndex == 1 ? ArchiveFormat.SevenZip : ArchiveFormat.Zip, password,
+                    SelectedFormat, password,
                     _formatIndex == 1 && _encryptNames, progress, token, createSettings);
                 else if (mode == DialogKind.Extract) await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, progress, token, extractSettings);
                 else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, progress, token);
@@ -575,13 +616,15 @@ public partial class MainWindow
                 DialogKind.Test => "测试完成，所有文件均可读取。", DialogKind.Create => "压缩包创建完成。",
                 DialogKind.Extract => "提取完成。", DialogKind.AddToArchive => "压缩包已更新。",
                 DialogKind.DeleteEntries => "所选归档项目已删除。", _ => "重命名完成。",
-            }, mode);
+            }, mode, mode is DialogKind.Create or DialogKind.Extract ? destination : null,
+                mode == DialogKind.Create ? Path.GetDirectoryName(destination) : mode == DialogKind.Extract ? destination : null);
             if (completed && mode == DialogKind.Extract && !_disposed)
             {
                 try { Desktop.Open(destination); }
                 catch (Exception error)
                 {
-                    ReportError(new IOException($"解压已完成，但无法打开输出文件夹：{FriendlyError(error)}", error));
+                    _dialogError = $"解压已完成，但无法打开输出文件夹：{FriendlyError(error)}";
+                    Invalidate();
                 }
             }
             if (completed && mode is DialogKind.AddToArchive or DialogKind.DeleteEntries or DialogKind.Rename)
@@ -602,18 +645,27 @@ public partial class MainWindow
     }
     private string? PasswordOrNull => string.IsNullOrEmpty(_password) ? null : _password;
 
-    private async Task<bool> RunOperationAsync(Func<CancellationToken, Task> action, string success, DialogKind returnPanel = DialogKind.None)
+    private async Task<bool> RunOperationAsync(Func<CancellationToken, Task> action, string success, DialogKind returnPanel = DialogKind.None,
+        string? resultPath = null, string? resultFolder = null)
     {
         if (_busy) return false;
         _busy = true; _panel = DialogKind.Progress; _progress = -1; _progressText = "正在准备…";
-        _dialogError = ""; _error = ""; _cancelRequested = false;
+        _dialogError = ""; _error = ""; _cancelRequested = false; _operationSucceeded = false;
+        _resultPath = ""; _resultFolder = "";
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operationCancellation = cancellation; Invalidate();
         try
         {
             await _operations.RunAsync(action, cancellation.Token);
             if (_disposed) return false;
-            StatusMessage = success; _panel = DialogKind.None; _password = ""; _passwordConfirm = ""; return true;
+            StatusMessage = success;
+            if (resultPath is not null && resultFolder is not null)
+            {
+                _operationSucceeded = true; _resultPath = resultPath; _resultFolder = resultFolder;
+                _progress = 100; _progressText = success; _cancelRequested = false;
+            }
+            else _panel = DialogKind.None;
+            _password = ""; _passwordConfirm = ""; return true;
         }
         catch (OperationCanceledException) { if (!_disposed) { StatusMessage = "操作已取消"; _panel = DialogKind.None; _password = ""; _passwordConfirm = ""; } return false; }
         catch (Exception error) { if (!_disposed) { _panel = returnPanel; _dialogError = FriendlyError(error); if (returnPanel == DialogKind.None) _error = _dialogError; } return false; }
