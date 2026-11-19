@@ -37,6 +37,11 @@ public partial class MainWindow
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _operationCancellation;
     private readonly BackgroundOperations _operations = new();
+    private sealed record NestedArchive(BrowserSnapshot Parent, string? ParentPassword, string DisplayPath, string Name);
+    private readonly Dictionary<string, NestedArchive> _nestedArchives = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private string? _nestedWorkspace, _rootArchivePath;
+    private bool InNestedArchive => _snapshot?.ArchivePath is { } path && _nestedArchives.ContainsKey(path);
+    private string OperationArchiveName => _nestedArchives.TryGetValue(_operationArchive, out var nested) ? nested.Name : Path.GetFileName(_operationArchive);
     private readonly string[] _formatNames = ["ZIP", "7z"];
     private readonly string[] _zipLevels = ["存储", "最快", "快速", "标准", "最大", "极限"];
     private readonly string[] _sevenZipLevels = ["最快", "快速", "标准", "最大", "极限"];
@@ -89,7 +94,7 @@ public partial class MainWindow
     public bool TaskIsRunning => _busy || _pickerBusy;
     private BrowserItem[] SelectedRows => Files?.SelectedItems.OfType<BrowserItem>().ToArray() ?? [];
     private bool HasSelection => SelectedRows.Length > 0;
-    private bool CanEditArchive => !_busy && _snapshot?.ArchivePath is { } path &&
+    private bool CanEditArchive => !_busy && !InNestedArchive && _snapshot?.ArchivePath is { } path &&
         (Path.GetExtension(path).Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
          Path.GetExtension(path).Equals(".7z", StringComparison.OrdinalIgnoreCase));
     private bool CanAdd => _showBrowser && CanEditArchive;
@@ -111,9 +116,9 @@ public partial class MainWindow
     private string DialogDescription => _panel switch
     {
         DialogKind.Create => "将所选文件创建为新的压缩包。已有文件不会被覆盖。",
-        DialogKind.Extract => Path.GetFileName(_operationArchive) + (_extractEntries is null ? " · 全部内容" : $" · 提取 {_extractEntries.Length} 个所选项目"),
-        DialogKind.Test => Path.GetFileName(_operationArchive) + " · 读取所有文件，检查内容是否可以完整解压。",
-        DialogKind.Unlock => Path.GetFileName(_operationArchive) + " · 此压缩包可能需要密码。",
+        DialogKind.Extract => OperationArchiveName + (_extractEntries is null ? " · 全部内容" : $" · 提取 {_extractEntries.Length} 个所选项目"),
+        DialogKind.Test => OperationArchiveName + " · 读取所有文件，检查内容是否可以完整解压。",
+        DialogKind.Unlock => OperationArchiveName + " · 此压缩包可能需要密码。",
         DialogKind.EntryPassword => (_passwordEntry?.Name ?? "") + " · 请输入文件密码。",
         DialogKind.Progress => _cancelRequested ? "正在取消，请稍候…" : "操作完成前请保持应用打开。",
         DialogKind.AddToArchive => Path.GetFileName(_operationArchive) + "!/" + _editDirectory,
@@ -170,7 +175,7 @@ public partial class MainWindow
         }
     }
 
-    public async Task NavigateToAsync(string path, string prefix = "", string? password = null, bool remember = true)
+    public async Task NavigateToAsync(string path, string prefix = "", string? password = null, bool remember = true, bool preserveHistory = false)
     {
         if (_busy || _disposed) return;
         var fullPath = Path.GetFullPath(path);
@@ -186,8 +191,15 @@ public partial class MainWindow
             if (_disposed) return;
             var sameArchive = _snapshot?.ArchivePath is { } previousPath &&
                 string.Equals(previousPath, snapshot!.ArchivePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-            if (!sameArchive) _history.Clear();
-            else if (remember && snapshot!.DisplayPath != _snapshot!.DisplayPath) _history.Push((_snapshot, _archivePassword));
+            if (_nestedArchives.TryGetValue(fullPath, out var nested)) snapshot = snapshot! with { ArchiveDisplayPath = nested.DisplayPath };
+            if (!sameArchive && !preserveHistory)
+            {
+                _history.Clear();
+                ClearNestedArchives();
+                _rootArchivePath = fullPath;
+            }
+            else if (remember && _snapshot is not null && snapshot!.DisplayPath != _snapshot.DisplayPath)
+                _history.Push((_snapshot, _archivePassword));
             _archivePassword = password;
             _showBrowser = true;
             ApplySnapshot(snapshot!);
@@ -199,7 +211,12 @@ public partial class MainWindow
     {
         if (_snapshot?.ArchivePath is not { } archive) return;
         var current = _snapshot.ArchivePrefix.TrimEnd('/');
-        if (current.Length == 0) return;
+        if (current.Length == 0)
+        {
+            if (_nestedArchives.TryGetValue(archive, out var nested))
+                await NavigateToAsync(nested.Parent.ArchivePath!, nested.Parent.ArchivePrefix, nested.ParentPassword, preserveHistory: true);
+            return;
+        }
         await NavigateToAsync(archive, current.Contains('/') ? current[..current.LastIndexOf('/')] : "", _archivePassword);
     }
 
@@ -209,6 +226,7 @@ public partial class MainWindow
         if (_snapshot.ArchivePath is not null)
         {
             if (item.IsDirectory) await NavigateToAsync(_snapshot.ArchivePath, item.Path, _archivePassword);
+            else if (item.IsLink) throw new NotSupportedException("暂不支持打开压缩包内的链接。");
             else if (item.IsEncrypted && _archivePassword is null)
             {
                 _passwordEntry = item; _password = ""; _dialogError = "";
@@ -217,8 +235,59 @@ public partial class MainWindow
             else
             {
                 if (item.IsEncrypted) { _passwordEntry = item; _password = _archivePassword ?? ""; }
-                await OpenArchiveFileAsync(item, _archivePassword, item.IsEncrypted ? DialogKind.EntryPassword : DialogKind.None);
+                await OpenItemContentAsync(item, _archivePassword, item.IsEncrypted ? DialogKind.EntryPassword : DialogKind.None);
             }
+        }
+    }
+
+    private Task OpenItemContentAsync(BrowserItem item, string? password, DialogKind returnPanel) =>
+        item.IsArchive ? OpenNestedArchiveAsync(item, password, returnPanel) : OpenArchiveFileAsync(item, password, returnPanel);
+
+    private async Task OpenNestedArchiveAsync(BrowserItem item, string? password, DialogKind returnPanel)
+    {
+        var parent = _snapshot!;
+        var workspace = _nestedWorkspace ??= Directory.CreateTempSubdirectory("EclipseArchive-nested-").FullName;
+        var target = Path.Combine(workspace, Guid.NewGuid().ToString("N") + Path.GetExtension(item.Name));
+        var opened = await RunOperationAsync(async token =>
+        {
+            try
+            {
+                await using var source = File.OpenRead(parent.ArchivePath!);
+                await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                await Engine.ExtractEntryAsync(source, item.Path, output, password, token);
+            }
+            catch { if (File.Exists(target)) File.Delete(target); throw; }
+        }, "压缩包已打开", returnPanel);
+        if (!opened || _disposed) { if (File.Exists(target)) File.Delete(target); return; }
+        if (item.IsEncrypted) _archivePassword = password;
+        _nestedArchives[target] = new(parent, _archivePassword, parent.DisplayPath + item.Name, item.Name);
+        try
+        {
+            await NavigateToAsync(target, preserveHistory: true);
+        }
+        catch (SharpCompress.Common.CryptographicException error)
+        {
+            _operationArchive = target; _password = ""; _panel = DialogKind.Unlock;
+            _dialogError = FriendlyError(error); Invalidate();
+        }
+        catch
+        {
+            _nestedArchives.Remove(target);
+            if (File.Exists(target)) File.Delete(target);
+            throw;
+        }
+    }
+
+    private void ClearNestedArchives()
+    {
+        _nestedArchives.Clear();
+        var workspace = _nestedWorkspace;
+        _nestedWorkspace = null;
+        if (workspace is not null && Directory.Exists(workspace))
+        {
+            try { Directory.Delete(workspace, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 
@@ -251,12 +320,13 @@ public partial class MainWindow
     private void ApplySnapshot(BrowserSnapshot snapshot)
     {
         _snapshot = snapshot;
+        ActivePane.HasParentArchive = snapshot.ArchivePath is { } path && _nestedArchives.ContainsKey(path);
         ActivePane.FileScroll.ScrollToHorizontalOffset(0);
         ActivePane.FileScroll.ScrollToVerticalOffset(0);
         AddressBox.Text = snapshot.DisplayPath;
-        Title = "EclipseArchive — " + Path.GetFileName(snapshot.ArchivePath);
+        Title = "EclipseArchive — " + (snapshot.ArchivePath is { } archive && _nestedArchives.TryGetValue(archive, out var nested) ? nested.Name : Path.GetFileName(snapshot.ArchivePath));
         UpdateRows();
-        StatusMessage = $"{snapshot.Items.Count(item => item.IsDirectory)} 个文件夹，{snapshot.Items.Count(item => !item.IsDirectory)} 个文件 · {BrowserItem.FormatSize(snapshot.Items.Where(item => !item.IsDirectory).Sum(item => item.Size))}";
+        StatusMessage = $"{snapshot.Items.Count(item => item.IsDirectory)} 个文件夹，{snapshot.Items.Count(item => !item.IsDirectory)} 个文件 · {BrowserItem.FormatSize(snapshot.Items.Where(item => !item.IsDirectory).Sum(item => item.Size))}" + (InNestedArchive ? " · 嵌套压缩包只读" : "");
         Invalidate();
         ActivePane.RefreshView();
     }
@@ -317,7 +387,7 @@ public partial class MainWindow
     private async void GoBack()
     {
         if (_busy || !_history.TryPop(out var previous)) return;
-        try { await NavigateToAsync(previous.Snapshot.ArchivePath!, previous.Snapshot.ArchivePrefix, previous.Password, false); }
+        try { await NavigateToAsync(previous.Snapshot.ArchivePath!, previous.Snapshot.ArchivePrefix, previous.Password, false, preserveHistory: true); }
         catch (Exception error) { _history.Push(previous); ReportError(error); }
     }
     private async void ChooseAndOpen()
@@ -416,7 +486,7 @@ public partial class MainWindow
             ? HasSelection ? SelectedRows.Select(row => row.Path).ToArray() : _snapshot.ArchivePrefix.Length > 0 ? [_snapshot.ArchivePrefix] : null
             : null;
         _password = _snapshot?.ArchivePath is not null ? _archivePassword ?? "" : "";
-        _destination = UniqueDestination(Path.GetDirectoryName(_operationArchive)!, ArchiveBaseName(_operationArchive), "");
+        _destination = UniqueDestination(Path.GetDirectoryName(_rootArchivePath ?? _operationArchive)!, ArchiveBaseName(OperationArchiveName), "");
         _extractPathIndex = 1; _dialogError = ""; _panel = DialogKind.Extract; Invalidate();
     }
     private void PrepareTest()
@@ -445,7 +515,7 @@ public partial class MainWindow
                 var directory = Path.GetDirectoryName(_destination);
                 var folder = await ShowPickerAsync(() => Desktop.ChooseFolder(directory));
                 if (_disposed) return;
-                if (folder is not null) _destination = UniqueDestination(folder, ArchiveBaseName(_operationArchive), "");
+                if (folder is not null) _destination = UniqueDestination(folder, ArchiveBaseName(OperationArchiveName), "");
             }
             Invalidate();
         }
@@ -462,12 +532,12 @@ public partial class MainWindow
             if (mode == DialogKind.EntryPassword)
             {
                 if (PasswordOrNull is null) throw new InvalidOperationException("请输入密码。");
-                await OpenArchiveFileAsync(_passwordEntry!, PasswordOrNull, DialogKind.EntryPassword);
+                await OpenItemContentAsync(_passwordEntry!, PasswordOrNull, DialogKind.EntryPassword);
                 return;
             }
             if (mode == DialogKind.Unlock)
             {
-                await NavigateToAsync(_operationArchive, password: PasswordOrNull);
+                await NavigateToAsync(_operationArchive, password: PasswordOrNull, preserveHistory: _nestedArchives.ContainsKey(_operationArchive));
                 _panel = DialogKind.None; _password = ""; Invalidate(); return;
             }
             if (mode is DialogKind.Create or DialogKind.AddToArchive && _sources.Length == 0)
@@ -517,12 +587,18 @@ public partial class MainWindow
             if (completed && mode is DialogKind.AddToArchive or DialogKind.DeleteEntries or DialogKind.Rename)
             {
                 var message = StatusMessage;
+                _history.Clear();
+                ClearNestedArchives();
                 if (_snapshot?.ArchivePath is { } archivePath)
                     await NavigateToAsync(archivePath, _snapshot.ArchivePrefix, password, remember: false);
                 StatusMessage = message; Invalidate();
             }
         }
-        catch (Exception error) { _dialogError = FriendlyError(error); Invalidate(); }
+        catch (Exception error)
+        {
+            if (_panel == DialogKind.None) ReportError(error);
+            else { _dialogError = FriendlyError(error); Invalidate(); }
+        }
     }
     private string? PasswordOrNull => string.IsNullOrEmpty(_password) ? null : _password;
 
@@ -625,6 +701,6 @@ public partial class MainWindow
     {
         _disposed = true; _operationCancellation?.Cancel(); _lifetime.Cancel();
         try { _operations.StopAsync().GetAwaiter().GetResult(); }
-        finally { _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
+        finally { ClearNestedArchives(); _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
     }
 }

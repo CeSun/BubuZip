@@ -41,6 +41,9 @@ public partial class MainWindow
         _showBrowser = false;
         _activePane = RightPane;
         _history.Clear();
+        ClearNestedArchives();
+        _rootArchivePath = null;
+        RightPane.HasParentArchive = false;
         _archivePassword = null;
         _snapshot = null;
         RightPane.Files.Selection.Clear();

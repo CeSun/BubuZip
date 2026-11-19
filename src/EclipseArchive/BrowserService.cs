@@ -18,9 +18,10 @@ public sealed record BrowserItem(
 }
 
 public sealed record BrowserSnapshot(
-    string DirectoryPath, string? ArchivePath, string ArchivePrefix, IReadOnlyList<BrowserItem> Items)
+    string DirectoryPath, string? ArchivePath, string ArchivePrefix, IReadOnlyList<BrowserItem> Items,
+    string? ArchiveDisplayPath = null)
 {
-    public string DisplayPath => ArchivePath is null ? DirectoryPath : ArchivePath + "!/" + ArchivePrefix;
+    public string DisplayPath => ArchivePath is null ? DirectoryPath : (ArchiveDisplayPath ?? ArchivePath) + "!/" + ArchivePrefix;
 }
 
 public sealed class BrowserService(IArchiveEngine engine)

@@ -15,11 +15,12 @@ public partial class ArchivePane
     [UiParameter] public Action<string> SortRequested { get; set; } = _ => { };
     public BrowserSnapshot? Snapshot { get; set; }
     public string? Password { get; set; }
+    public bool HasParentArchive { get; set; }
     public Stack<(BrowserSnapshot Snapshot, string? Password)> History { get; } = new();
     public IReadOnlyList<BrowserItem> Rows { get; set; } = [];
     public string SortColumn { get; set; } = "name";
     public bool SortDescending { get; set; }
-    private bool CanGoUp => Snapshot?.ArchivePath is not null && Snapshot.ArchivePrefix.Length > 0;
+    private bool CanGoUp => Snapshot?.ArchivePath is not null && (Snapshot.ArchivePrefix.Length > 0 || HasParentArchive);
     public string Status { get; set; } = "就绪";
     private string SelectionText => $"{Files?.SelectedItems.Count ?? 0} / {Rows.Count} 个对象已选择";
     private string SizeText => Files?.SelectedItems.OfType<BrowserItem>().Where(item => !item.IsDirectory).Sum(item => item.Size) is > 0 and var size ? BrowserItem.FormatSize(size) : "";

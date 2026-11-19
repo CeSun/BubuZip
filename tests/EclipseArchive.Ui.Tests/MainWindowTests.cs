@@ -122,6 +122,162 @@ public sealed class MainWindowTests
     }
 
     [Fact]
+    public void NestedArchivesCanBeOpenedRecursivelyAndNavigateBackWithoutLeavingTheRoot()
+    {
+        using var fixture = new WindowFixture();
+        var inner = ArchiveBytes(ArchiveFormat.Zip, "content.txt", Encoding.UTF8.GetBytes("nested"));
+        var middle = ArchiveBytes(ArchiveFormat.SevenZip, "third.zip", inner);
+        var outer = ArchiveBytes(ArchiveFormat.Zip, "folder/second.7z", middle);
+        var root = Path.Combine(fixture.DirectoryPath, "outer.zip");
+        File.WriteAllBytes(root, outer);
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        var secondPath = fixture.Window.CurrentLocation!.ArchivePath!;
+        Assert.EndsWith("outer.zip!/folder/second.7z!/", fixture.Address.Text);
+        Assert.True(Assert.Single(fixture.Elements<ArchivePane>()).UpButton.IsEffectiveEnabled);
+        Assert.DoesNotContain(fixture.Elements<ArchiveCommand>(), command => command.Label == "添加" && command.IsEffectiveEnabled);
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        var thirdPath = fixture.Window.CurrentLocation!.ArchivePath!;
+        Assert.EndsWith("outer.zip!/folder/second.7z!/third.zip!/", fixture.Address.Text);
+        Assert.Equal("content.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal(secondPath, fixture.Window.CurrentLocation!.ArchivePath);
+        fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("folder/", fixture.Window.CurrentLocation.ArchivePrefix);
+        fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal("", fixture.Window.CurrentLocation!.ArchivePrefix);
+        fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).UpButton.IsEffectiveEnabled);
+        fixture.Click("返回首页");
+        Assert.False(File.Exists(secondPath));
+        Assert.False(File.Exists(thirdPath));
+    }
+
+    [Fact]
+    public void NestedArchivesHaveNoFixedDepthLimit()
+    {
+        using var fixture = new WindowFixture();
+        var bytes = ArchiveBytes(ArchiveFormat.Zip, "final.txt", Encoding.UTF8.GetBytes("end"));
+        for (var level = 0; level < 12; level++) bytes = ArchiveBytes(ArchiveFormat.Zip, $"level{level}.zip", bytes);
+        var root = Path.Combine(fixture.DirectoryPath, "deep.zip");
+        File.WriteAllBytes(root, bytes);
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        for (var level = 11; level >= 0; level--)
+            fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        Assert.Equal("final.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        for (var level = 0; level < 12; level++) fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).UpButton.IsEffectiveEnabled);
+    }
+
+    [Fact]
+    public void EncryptedNestedEntryAndEncryptedInnerHeadersUseSeparatePasswords()
+    {
+        using var fixture = new WindowFixture();
+        var inner = ArchiveBytes(ArchiveFormat.SevenZip, "secret.txt", Encoding.UTF8.GetBytes("secret"), "inner-password", true);
+        var root = Path.Combine(fixture.DirectoryPath, "outer.zip");
+        File.WriteAllBytes(root, ArchiveBytes(ArchiveFormat.Zip, "inner.7z", inner, "outer-password"));
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        Assert.Contains("打开加密文件", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "outer-password";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        Assert.Contains("打开压缩包", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "inner-password";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        Assert.Equal("secret.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+    }
+
+    [Fact]
+    public void BackCanCrossNestedArchiveBoundaries()
+    {
+        using var fixture = new WindowFixture();
+        var inner = ArchiveBytes(ArchiveFormat.Zip, "file.txt", Encoding.UTF8.GetBytes("data"));
+        var root = Path.Combine(fixture.DirectoryPath, "outer.zip");
+        File.WriteAllBytes(root, ArchiveBytes(ArchiveFormat.Zip, "folder/inner.zip", inner));
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.Click("更多");
+        var menu = Assert.Single(fixture.Elements<ContextMenu>(), candidate => candidate.Items.OfType<MenuItem>().Any(item => item.Label == "查看"));
+        var view = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.Label == "查看");
+        var submenu = Assert.IsType<ContextMenu>(view.Submenu);
+        Assert.Single(submenu.Items.OfType<MenuItem>(), item => item.Label == "后退").Click();
+        fixture.WaitForIdle();
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("folder/", fixture.Window.CurrentLocation.ArchivePrefix);
+    }
+
+    [Fact]
+    public void ExtractingNestedArchiveDefaultsBesideTheOriginalAndOpensOutput()
+    {
+        using var fixture = new WindowFixture();
+        var inner = ArchiveBytes(ArchiveFormat.Zip, "readme.txt", Encoding.UTF8.GetBytes("nested content"));
+        var root = Path.Combine(fixture.DirectoryPath, "outer.zip");
+        File.WriteAllBytes(root, ArchiveBytes(ArchiveFormat.Zip, "inner.zip", inner));
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.Click("提取"); fixture.Click("开始"); fixture.WaitForIdle();
+        var output = Assert.Single(fixture.Desktop.OpenedPaths);
+        Assert.Equal(Path.Combine(fixture.DirectoryPath, "inner"), output);
+        Assert.Equal("nested content", File.ReadAllText(Path.Combine(output, "readme.txt")));
+        Assert.EndsWith("inner.zip!/", fixture.Address.Text);
+    }
+
+    [Fact]
+    public void EncryptedNestedArchivePromptsForItsOwnPasswordAndCanRetry()
+    {
+        using var fixture = new WindowFixture();
+        var inner = ArchiveBytes(ArchiveFormat.SevenZip, "readme.txt", Encoding.UTF8.GetBytes("secret"), "inner-password", true);
+        var root = Path.Combine(fixture.DirectoryPath, "outer.zip");
+        File.WriteAllBytes(root, ArchiveBytes(ArchiveFormat.Zip, "inner.7z", inner));
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        Assert.Contains("打开压缩包", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "wrong";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        Assert.Contains("打开压缩包", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "inner-password";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        Assert.Equal("readme.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        fixture.Run(fixture.Window.NavigateUpAsync());
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+    }
+
+    [Fact]
+    public void InvalidNestedArchiveKeepsTheParentOpen()
+    {
+        using var fixture = new WindowFixture();
+        var root = Path.Combine(fixture.DirectoryPath, "outer.zip");
+        File.WriteAllBytes(root, ArchiveBytes(ArchiveFormat.Zip, "broken.zip", Encoding.UTF8.GetBytes("invalid")));
+        fixture.Desktop.ArchiveChoice = root;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        Assert.ThrowsAny<Exception>(() => fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems))));
+        Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+    }
+
+    private static byte[] ArchiveBytes(ArchiveFormat format, string entry, byte[] content, string? password = null, bool encryptNames = false)
+    {
+        using var archive = new MemoryStream();
+        using var input = new MemoryStream(content);
+        new SharpCompressArchiveEngine().CreateAsync(archive, [new ArchiveWriteEntry(entry, input)], format, password, encryptNames).GetAwaiter().GetResult();
+        return archive.ToArray();
+    }
+
+    [Fact]
     public void CreatingAnArchiveStartsAtHomeAndRemainsThereAfterSuccess()
     {
         using var fixture = new WindowFixture();
