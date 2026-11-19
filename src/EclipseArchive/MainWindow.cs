@@ -17,69 +17,95 @@ public partial class MainWindow
     [UiParameter] public string InitialPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     private Grid RootGrid = null!;
-    private Menu MainMenu = null!;
-    private TextBox AddressBox = null!;
-    private ListBox Files = null!;
+    private ArchiveSurface DialogOverlay = null!;
+    private ArchiveDialogBorder DialogFrame = null!;
+    private Button DialogDismissButton = null!;
+    private Element? _focusBeforeDialog;
+    private DialogKind _presentedPanel;
+    private ContextMenu MainMenu = null!;
+    private ArchiveCommand MoreButton = null!;
+    private ArchivePane RightPane = null!;
+    private Button HomeCreateButton = null!;
+    private ArchivePane? _activePane;
+    private ArchivePane ActivePane => _activePane ?? RightPane;
+    private TextBox AddressBox => ActivePane.Address;
+    private ListBox Files => ActivePane?.Files!;
+    private bool _showBrowser;
     private BrowserService _browser = null!;
-    private BrowserSnapshot? _snapshot;
-    private readonly Stack<(BrowserSnapshot Snapshot, string? Password)> _history = new();
+    private BrowserSnapshot? _snapshot { get => ActivePane?.Snapshot; set => ActivePane.Snapshot = value; }
+    private Stack<(BrowserSnapshot Snapshot, string? Password)> _history => ActivePane.History;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _operationCancellation;
     private readonly BackgroundOperations _operations = new();
     private readonly string[] _formatNames = ["ZIP", "7z"];
+    private readonly string[] _zipLevels = ["存储", "最快", "快速", "标准", "最大", "极限"];
+    private readonly string[] _sevenZipLevels = ["最快", "快速", "标准", "最大", "极限"];
+    private readonly string[] _zipEncryptionNames = ["AES-256", "ZipCrypto（兼容旧软件）"];
+    private readonly string[] _extractPathNames = ["完整路径", "相对于当前目录", "不包含目录"];
+    private static readonly ArchiveCompressionLevel[] Levels = [ArchiveCompressionLevel.Store, ArchiveCompressionLevel.Fastest, ArchiveCompressionLevel.Fast, ArchiveCompressionLevel.Normal, ArchiveCompressionLevel.Maximum, ArchiveCompressionLevel.Ultra];
+    private string[] CompressionLevelNames => _formatIndex == 0 ? _zipLevels : _sevenZipLevels;
+    private int _compressionLevelIndex = 3, _zipEncryptionIndex, _extractPathIndex = 1;
+    private string _passwordConfirm = "";
     private string[] _sources = [];
     private string[]? _extractEntries;
+    private BrowserItem? _passwordEntry;
     private string[] _editEntries = [];
     private string _newName = "", _editDirectory = "";
     private bool _replaceExisting;
-    private string? _archivePassword;
-    private string _operationArchive = "", _destination = "", _password = "", _error = "", _dialogError = "";
-    private string _progressText = "", _sortColumn = "name", _lastClick = "";
+    private string? _archivePassword { get => ActivePane.Password; set => ActivePane.Password = value; }
+    private string _operationArchive = "", _destination = "", _suggestedDestination = "", _password = "", _error = "", _dialogError = "";
+    private string _progressText = "", _lastClick = "";
+    private string _messageTitle = "", _messageBody = "";
+    private string _sortColumn { get => ActivePane.SortColumn; set => ActivePane.SortColumn = value; }
     private long _lastClickTime;
-    private bool _busy, _disposed, _showHidden, _sortDescending, _encryptNames, _cancelRequested;
+    private bool _busy, _pickerBusy, _disposed, _encryptNames, _cancelRequested;
+    private bool _sortDescending { get => ActivePane.SortDescending; set => ActivePane.SortDescending = value; }
     private int _formatIndex;
     private int FormatIndex
     {
         get => _formatIndex;
         set
         {
+            var wasSuggested = _destination == _suggestedDestination;
             _formatIndex = value;
             if (_panel == DialogKind.Create && _destination.Length > 0)
+            {
                 _destination = Path.ChangeExtension(_destination, value == 1 ? ".7z" : ".zip");
-            if (value == 0) { _password = ""; _encryptNames = false; }
+                if (wasSuggested) _suggestedDestination = _destination;
+            }
+            if (value == 0) _encryptNames = false;
+            _compressionLevelIndex = value == 0 ? 3 : 2;
             Invalidate();
         }
     }
     private double _progress = -1;
     private ThemeVariant _theme = ThemeVariant.System;
     private DialogKind _panel;
-    private enum DialogKind { None, Create, Extract, Test, Unlock, Progress, AddToArchive, DeleteEntries, Rename }
+    private enum DialogKind { None, Create, Extract, Test, Unlock, EntryPassword, Progress, AddToArchive, DeleteEntries, Rename, Options, Message }
 
-    public string StatusMessage { get; private set; } = "就绪";
-    public IReadOnlyList<BrowserItem> VisibleItems { get; private set; } = [];
+    public string StatusMessage { get => ActivePane?.Status ?? "就绪"; private set => ActivePane.Status = value; }
+    public IReadOnlyList<BrowserItem> VisibleItems { get => ActivePane.Rows; private set => ActivePane.Rows = value; }
     public BrowserSnapshot? CurrentLocation => _snapshot;
-    public bool TaskIsRunning => _busy;
+    public bool TaskIsRunning => _busy || _pickerBusy;
     private BrowserItem[] SelectedRows => Files?.SelectedItems.OfType<BrowserItem>().ToArray() ?? [];
     private bool HasSelection => SelectedRows.Length > 0;
-    private bool CanManageFiles => !_busy && _snapshot?.ArchivePath is null && HasSelection;
     private bool CanEditArchive => !_busy && _snapshot?.ArchivePath is { } path &&
         (Path.GetExtension(path).Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
          Path.GetExtension(path).Equals(".7z", StringComparison.OrdinalIgnoreCase));
-    private bool CanAdd => !_busy && (_snapshot?.ArchivePath is null || CanEditArchive);
-    private bool CanCopy => !_busy && HasSelection;
-    private bool CanDelete => CanManageFiles || CanEditArchive && HasSelection;
-    private bool CanRename => HasSelection && SelectedRows.Length == 1 && (CanManageFiles || CanEditArchive);
+    private bool CanAdd => _showBrowser && CanEditArchive;
+    private bool CanCopy => _showBrowser && !_busy && HasSelection;
+    private bool CanDelete => CanEditArchive && HasSelection;
+    private bool CanRename => HasSelection && SelectedRows.Length == 1 && CanEditArchive;
     private bool CanExtract => !_busy && (_snapshot?.ArchivePath is not null || SelectedRows.Any(row => row.IsArchive));
-    private string SelectionSummary => HasSelection
-        ? $"已选择 {SelectedRows.Length} 项 · {BrowserItem.FormatSize(SelectedRows.Where(row => !row.IsDirectory).Sum(row => row.Size))}"
-        : _snapshot?.ArchivePath is not null ? CanEditArchive ? "归档浏览 · 可修改" : "归档浏览 · 只读" : "本地文件";
     private string SourceSummary => _sources.Length == 0 ? "请选择要添加的文件或文件夹" :
         _sources.Length == 1 ? Path.GetFileName(_sources[0]) : $"已选择 {_sources.Length} 个文件或文件夹";
     private string DialogTitle => _panel switch
     {
         DialogKind.Create => "添加到压缩包", DialogKind.Extract => "提取文件", DialogKind.Test => "测试压缩包",
-        DialogKind.Unlock => "打开压缩包", DialogKind.Progress => "正在处理",
+        DialogKind.Unlock => "打开压缩包", DialogKind.EntryPassword => "打开加密文件", DialogKind.Progress => "正在处理",
         DialogKind.AddToArchive => "添加到当前压缩包", DialogKind.DeleteEntries => "从压缩包删除", DialogKind.Rename => "重命名",
+        DialogKind.Options => "选项",
+        DialogKind.Message => _messageTitle,
         _ => "",
     };
     private string DialogDescription => _panel switch
@@ -88,17 +114,20 @@ public partial class MainWindow
         DialogKind.Extract => Path.GetFileName(_operationArchive) + (_extractEntries is null ? " · 全部内容" : $" · 提取 {_extractEntries.Length} 个所选项目"),
         DialogKind.Test => Path.GetFileName(_operationArchive) + " · 读取所有文件，检查内容是否可以完整解压。",
         DialogKind.Unlock => Path.GetFileName(_operationArchive) + " · 此压缩包可能需要密码。",
+        DialogKind.EntryPassword => (_passwordEntry?.Name ?? "") + " · 请输入文件密码。",
         DialogKind.Progress => _cancelRequested ? "正在取消，请稍候…" : "操作完成前请保持应用打开。",
         DialogKind.AddToArchive => Path.GetFileName(_operationArchive) + "!/" + _editDirectory,
         DialogKind.DeleteEntries => $"将从 {Path.GetFileName(_operationArchive)} 中删除所选 {_editEntries.Length} 个项目及其内容。",
         DialogKind.Rename => _editEntries.FirstOrDefault() ?? "",
+        DialogKind.Options => "调整文件管理器的显示方式。",
+        DialogKind.Message => "",
         _ => "",
     };
     private bool IsArchiveEditDialog => Path.GetExtension(_operationArchive).Equals(".7z", StringComparison.OrdinalIgnoreCase) &&
         _panel is DialogKind.AddToArchive or DialogKind.DeleteEntries or DialogKind.Rename;
     private string DialogConfirmLabel => _panel switch
     {
-        DialogKind.Unlock => "打开", DialogKind.AddToArchive => "保存修改",
+        DialogKind.Unlock or DialogKind.EntryPassword => "打开", DialogKind.AddToArchive => "保存修改",
         DialogKind.DeleteEntries => "删除", DialogKind.Rename => "保存", _ => "开始",
     };
 
@@ -106,57 +135,72 @@ public partial class MainWindow
     {
         base.OnInitialized();
         _browser = new BrowserService(Engine);
-        foreach (var item in MainMenu.Children.OfType<MenuItem>())
-            if (item.Submenu is ContextMenu submenu)
-                item.AddHandler(Button.ClickEvent, _ => submenu.Placement = Placement.Bottom);
-        Files.ItemTemplate = CreateRow;
-        Files.Selection.Changed += Invalidate;
-        Files.AddHandler(Element.KeyDownEvent, args =>
+        InitializePane(RightPane);
+        foreach (var command in RootGrid.Descendants().OfType<ArchiveCommand>().Where(command => !command.ShowLabel).ToArray())
         {
-            if (args is KeyEventArgs { Key: Key.Enter }) { args.Handled = true; OpenSelected(); }
-            else if (args is KeyEventArgs { Key: Key.Backspace }) { args.Handled = true; GoUp(); }
-        });
-        AddressBox.AddHandler(Element.KeyDownEvent, args =>
-        {
-            if (args is KeyEventArgs { Key: Key.Enter }) { args.Handled = true; OpenAddress(); }
-        });
+            var text = new TextBlock { FontSize = 12, Padding = 7 }; text.AddRun(command.Label);
+            RootGrid.Children.Add(new ToolTip { Target = command, Content = text });
+        }
         RootGrid.AddHandler(Element.KeyDownEvent, HandleKey);
-        try { ApplySnapshot(_browser.BrowseDirectory(Directory.Exists(InitialPath) ? InitialPath : Path.GetDirectoryName(InitialPath)!)); }
-        catch (Exception error) { _error = FriendlyError(error); ApplySnapshot(_browser.BrowseDirectory(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))); }
+    }
+
+    protected override void OnUpdating()
+    {
+        base.OnUpdating();
+        if (_presentedPanel == DialogKind.None && _panel != DialogKind.None)
+            _focusBeforeDialog = FocusManager.GetFor(RootGrid)?.Focused;
+    }
+
+    protected override void OnUpdated()
+    {
+        base.OnUpdated();
+        if (_presentedPanel == _panel) return;
+        var previous = _presentedPanel;
+        _presentedPanel = _panel;
+        if (_panel != DialogKind.None)
+            DialogDismissButton.RequestFocus();
+        else if (previous != DialogKind.None)
+        {
+            var prior = _focusBeforeDialog;
+            _focusBeforeDialog = null;
+            if (prior?.RequestFocus() != true)
+            {
+                if (_showBrowser) Files.RequestFocus(); else HomeCreateButton.RequestFocus();
+            }
+        }
     }
 
     public async Task NavigateToAsync(string path, string prefix = "", string? password = null, bool remember = true)
     {
         if (_busy || _disposed) return;
+        var fullPath = Path.GetFullPath(path);
+        if (Directory.Exists(fullPath)) throw new InvalidOperationException("只能浏览压缩包内的内容，不能浏览系统文件夹。");
         _busy = true; _error = ""; Invalidate();
         try
         {
             BrowserSnapshot? snapshot = null;
-            var showHidden = _showHidden;
             await _operations.RunAsync(async token =>
             {
-                snapshot = Directory.Exists(path)
-                    ? _browser.BrowseDirectory(path, showHidden)
-                    : await _browser.BrowseArchiveAsync(path, prefix, password, token).ConfigureAwait(false);
+                snapshot = await _browser.BrowseArchiveAsync(fullPath, prefix, password, token).ConfigureAwait(false);
             }, _lifetime.Token);
             if (_disposed) return;
-            if (remember && _snapshot is not null && snapshot!.DisplayPath != _snapshot.DisplayPath) _history.Push((_snapshot, _archivePassword));
-            _archivePassword = snapshot!.ArchivePath is null ? null : password;
-            ApplySnapshot(snapshot);
+            var sameArchive = _snapshot?.ArchivePath is { } previousPath &&
+                string.Equals(previousPath, snapshot!.ArchivePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            if (!sameArchive) _history.Clear();
+            else if (remember && snapshot!.DisplayPath != _snapshot!.DisplayPath) _history.Push((_snapshot, _archivePassword));
+            _archivePassword = password;
+            _showBrowser = true;
+            ApplySnapshot(snapshot!);
         }
         finally { _busy = false; Invalidate(); }
     }
 
     public async Task NavigateUpAsync()
     {
-        if (_snapshot is null) return;
-        if (_snapshot.ArchivePath is not null)
-        {
-            var current = _snapshot.ArchivePrefix.TrimEnd('/');
-            if (current.Length == 0) await NavigateToAsync(_snapshot.DirectoryPath);
-            else await NavigateToAsync(_snapshot.ArchivePath, current.Contains('/') ? current[..current.LastIndexOf('/')] : "", _archivePassword);
-        }
-        else if (Directory.GetParent(_snapshot.DirectoryPath) is { } parent) await NavigateToAsync(parent.FullName);
+        if (_snapshot?.ArchivePath is not { } archive) return;
+        var current = _snapshot.ArchivePrefix.TrimEnd('/');
+        if (current.Length == 0) return;
+        await NavigateToAsync(archive, current.Contains('/') ? current[..current.LastIndexOf('/')] : "", _archivePassword);
     }
 
     public async Task OpenItemAsync(BrowserItem item)
@@ -165,42 +209,56 @@ public partial class MainWindow
         if (_snapshot.ArchivePath is not null)
         {
             if (item.IsDirectory) await NavigateToAsync(_snapshot.ArchivePath, item.Path, _archivePassword);
+            else if (item.IsEncrypted && _archivePassword is null)
+            {
+                _passwordEntry = item; _password = ""; _dialogError = "";
+                _panel = DialogKind.EntryPassword; Invalidate();
+            }
             else
             {
-                var archive = _snapshot.ArchivePath;
-                var password = _archivePassword;
-                var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EclipseArchive", "Opened", Guid.NewGuid().ToString("N"));
-                var target = Path.Combine(folder, Path.GetFileName(item.Name));
-                var opened = await RunOperationAsync(async token =>
-                {
-                    Directory.CreateDirectory(folder);
-                    if (!OperatingSystem.IsWindows())
-                        File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                    try
-                    {
-                        await using var source = File.OpenRead(archive);
-                        await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
-                        await Engine.ExtractEntryAsync(source, item.Path, output, password, token);
-                    }
-                    catch { Directory.Delete(folder, true); throw; }
-                }, "文件已提取并打开");
-                if (opened && !_disposed && File.Exists(target)) Desktop.Open(target);
-                else if (Directory.Exists(folder)) Directory.Delete(folder, true);
+                if (item.IsEncrypted) { _passwordEntry = item; _password = _archivePassword ?? ""; }
+                await OpenArchiveFileAsync(item, _archivePassword, item.IsEncrypted ? DialogKind.EntryPassword : DialogKind.None);
             }
         }
-        else if (item.IsDirectory) await NavigateToAsync(item.Path);
-        else if (item.IsArchive) await TryOpenArchiveAsync(item.Path);
-        else Desktop.Open(item.Path);
+    }
+
+    private async Task OpenArchiveFileAsync(BrowserItem item, string? password, DialogKind returnPanel)
+    {
+        var archive = _snapshot!.ArchivePath!;
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EclipseArchive", "Opened", Guid.NewGuid().ToString("N"));
+        var target = Path.Combine(folder, Path.GetFileName(item.Name));
+        var opened = await RunOperationAsync(async token =>
+        {
+            Directory.CreateDirectory(folder);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            try
+            {
+                await using var source = File.OpenRead(archive);
+                await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
+                await Engine.ExtractEntryAsync(source, item.Path, output, password, token);
+            }
+            catch { Directory.Delete(folder, true); throw; }
+        }, "文件已提取并打开", returnPanel);
+        if (opened && !_disposed && File.Exists(target))
+        {
+            if (item.IsEncrypted) _archivePassword = password;
+            Desktop.Open(target);
+        }
+        else if (Directory.Exists(folder)) Directory.Delete(folder, true);
     }
 
     private void ApplySnapshot(BrowserSnapshot snapshot)
     {
         _snapshot = snapshot;
+        ActivePane.FileScroll.ScrollToHorizontalOffset(0);
+        ActivePane.FileScroll.ScrollToVerticalOffset(0);
         AddressBox.Text = snapshot.DisplayPath;
-        Title = snapshot.ArchivePath is null ? "EclipseArchive — " + Path.GetFileName(snapshot.DirectoryPath) : "EclipseArchive — " + Path.GetFileName(snapshot.ArchivePath);
+        Title = "EclipseArchive — " + Path.GetFileName(snapshot.ArchivePath);
         UpdateRows();
         StatusMessage = $"{snapshot.Items.Count(item => item.IsDirectory)} 个文件夹，{snapshot.Items.Count(item => !item.IsDirectory)} 个文件 · {BrowserItem.FormatSize(snapshot.Items.Where(item => !item.IsDirectory).Sum(item => item.Size))}";
         Invalidate();
+        ActivePane.RefreshView();
     }
 
     private void UpdateRows()
@@ -214,25 +272,34 @@ public partial class MainWindow
         var rows = _snapshot.Items.OrderByDescending(row => row.IsDirectory);
         VisibleItems = (_sortDescending ? rows.ThenByDescending(Key) : rows.ThenBy(Key)).ToArray();
         Files.ItemsSource = VisibleItems;
+        ActivePane.RefreshView();
         Invalidate();
     }
 
-    private Element CreateRow(object? value)
+    private Element CreateRow(object? value, ArchivePane pane)
     {
         var item = (BrowserItem)value!;
-        var grid = new Grid { ColumnDefinitions = "*,105,105,115,170,72", Height = 28, ClipToBounds = true };
-        var values = new[] { item.Name, item.SizeLabel, item.PackedSizeLabel, item.TypeLabel, item.ModifiedLabel, item.AttributesLabel };
-        for (var index = 0; index < values.Length; index++)
+        var grid = new Grid { ColumnDefinitions = "200,110,160,110,120,80", Height = 22, ClipToBounds = true };
+        var name = new Grid { ColumnDefinitions = "22,*" };
+        name.Children.Add(new ArchiveGlyph { Symbol = item.IsDirectory ? ArchiveSymbol.Folder : item.IsArchive ? ArchiveSymbol.Archive : ArchiveSymbol.File, VerticalAlignment = VerticalAlignment.Center });
+        var label = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true };
+        label.AddRun(item.Name); Grid.SetColumn(label, 1); name.Children.Add(label); grid.Children.Add(name);
+        var values = new[] { "", item.IsDirectory ? "" : item.Size.ToString("N0").Replace(',', ' '), item.ModifiedLabel,
+            item.PackedSize?.ToString("N0").Replace(',', ' ') ?? "", item.TypeLabel, item.AttributesLabel };
+        for (var index = 1; index < values.Length; index++)
         {
-            var cell = new TextBlock { FontSize = 13, Padding = 5, ClipToBounds = true };
+            var cell = new TextBlock { FontSize = 12, Margin = 3, VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = index is 1 or 3 ? HorizontalAlignment.Right : HorizontalAlignment.Stretch, ClipToBounds = true };
             cell.AddRun(values[index]); Grid.SetColumn(cell, index); grid.Children.Add(cell);
         }
         grid.AddHandler(Element.PointerPressedEvent, args =>
         {
+            ActivatePane(pane);
             if (args is PointerEventArgs { Button: PointerButton.Right }) Files.SelectedItem = item;
         });
         grid.AddHandler(Element.PointerReleasedEvent, args =>
         {
+            ActivatePane(pane);
             if (args is not PointerEventArgs { Button: PointerButton.Left } pointer || pointer.Modifiers != KeyModifiers.None) return;
             var now = Stopwatch.GetTimestamp();
             if (_lastClick == item.Path && Stopwatch.GetElapsedTime(_lastClickTime, now).TotalMilliseconds < 450)
@@ -250,30 +317,34 @@ public partial class MainWindow
     private async void GoBack()
     {
         if (_busy || !_history.TryPop(out var previous)) return;
-        try { await NavigateToAsync(previous.Snapshot.ArchivePath ?? previous.Snapshot.DirectoryPath, previous.Snapshot.ArchivePrefix, previous.Password, false); }
+        try { await NavigateToAsync(previous.Snapshot.ArchivePath!, previous.Snapshot.ArchivePrefix, previous.Password, false); }
         catch (Exception error) { _history.Push(previous); ReportError(error); }
-    }
-    private async void GoHome() => await NavigateSafelyAsync(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-    private async void GoDesktop() => await NavigateSafelyAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Desktop"));
-    private async void GoDownloads() => await NavigateSafelyAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
-    private async Task NavigateSafelyAsync(string path) { try { await NavigateToAsync(path); } catch (Exception error) { ReportError(error); } }
-    private async void OpenAddress()
-    {
-        var address = AddressBox.Text.Trim();
-        if (address.StartsWith('~')) address = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + address[1..];
-        var marker = address.IndexOf("!/", StringComparison.Ordinal);
-        try
-        {
-            if (marker >= 0) await NavigateToAsync(address[..marker], address[(marker + 2)..], _archivePassword);
-            else if (File.Exists(address)) await TryOpenArchiveAsync(address);
-            else await NavigateToAsync(address);
-        }
-        catch (Exception error) { ReportError(error); }
     }
     private async void ChooseAndOpen()
     {
-        try { if (Desktop.ChooseArchive() is { } file) await TryOpenArchiveAsync(file); }
-        catch (Exception error) { ReportError(error); }
+        if (_pickerBusy || _busy) return;
+        try
+        {
+            var file = await ShowPickerAsync(Desktop.ChooseArchive);
+            if (!_disposed && file is not null) await TryOpenArchiveAsync(file);
+        }
+        catch (Exception error) { if (!_disposed) ReportError(error); }
+    }
+
+    private async Task<T> ShowPickerAsync<T>(Func<T> picker)
+    {
+        _pickerBusy = true; Invalidate();
+        try
+        {
+            return Desktop is IAsyncDesktopDialogService asyncDialogs
+                ? await asyncDialogs.ShowDialogAsync(picker)
+                : picker();
+        }
+        finally
+        {
+            _pickerBusy = false;
+            if (!_disposed) Invalidate();
+        }
     }
     private async Task TryOpenArchiveAsync(string path)
     {
@@ -286,14 +357,12 @@ public partial class MainWindow
     }
     private async void Refresh()
     {
-        if (_snapshot is null) return;
-        try { await NavigateToAsync(_snapshot.ArchivePath ?? _snapshot.DirectoryPath, _snapshot.ArchivePrefix, _archivePassword, false); }
+        if (_snapshot?.ArchivePath is not { } archive) return;
+        try { await NavigateToAsync(archive, _snapshot.ArchivePrefix, _archivePassword, false); }
         catch (Exception error) { ReportError(error); }
     }
-    private void ToggleHidden() { _showHidden = !_showHidden; Refresh(); }
     private void SortBy(string column) { _sortDescending = _sortColumn == column && !_sortDescending; _sortColumn = column; UpdateRows(); }
     private void SelectAll() { if (VisibleItems.Count > 0) { Files.Selection.Select(0); Files.Selection.Select(VisibleItems.Count - 1, extend: true); } }
-    private void RevealLocation() { try { Desktop.Reveal(_snapshot?.ArchivePath ?? _snapshot?.DirectoryPath ?? InitialPath); } catch (Exception error) { ReportError(error); } }
     private void DismissError() { _error = ""; Invalidate(); }
 
     private void PrepareCreate()
@@ -306,15 +375,37 @@ public partial class MainWindow
             _sources = []; _password = _archivePassword ?? ""; _replaceExisting = false; _dialogError = "";
             _panel = DialogKind.AddToArchive; Invalidate(); return;
         }
-        _sources = _snapshot?.ArchivePath is null ? SelectedRows.Select(row => row.Path).ToArray() : [];
-        _formatIndex = 0; _password = ""; _encryptNames = false; _dialogError = "";
-        _destination = UniqueDestination(_snapshot?.DirectoryPath ?? InitialPath, _sources.Length == 1 ? Path.GetFileNameWithoutExtension(_sources[0]) : "Archive", ".zip");
+        _sources = [];
+        _formatIndex = 0; _compressionLevelIndex = 3; _zipEncryptionIndex = 0; _password = ""; _passwordConfirm = ""; _encryptNames = false; _dialogError = "";
+        var folder = Directory.Exists(InitialPath) ? InitialPath : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _destination = _suggestedDestination = UniqueDestination(folder, "Archive", ".zip");
         _panel = DialogKind.Create; Invalidate();
     }
-    private void ChooseCreateInputs()
+    private async void ChooseCreateInputs()
     {
-        try { var paths = Desktop.ChooseInputs(); if (paths.Count > 0) { _sources = paths.ToArray(); Invalidate(); } }
-        catch (Exception error) { _dialogError = FriendlyError(error); Invalidate(); }
+        if (_pickerBusy || _busy) return;
+        try
+        {
+            var paths = await ShowPickerAsync(Desktop.ChooseInputs);
+            if (_disposed || paths.Count == 0) return;
+            _sources = _sources.Concat(paths).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
+            if (_panel == DialogKind.Create && _destination == _suggestedDestination)
+            {
+                var first = Path.GetFullPath(_sources[0]);
+                var folder = Path.GetDirectoryName(first) ?? InitialPath;
+                var name = _sources.Length == 1
+                    ? Directory.Exists(first) ? Path.GetFileName(first.TrimEnd(Path.DirectorySeparatorChar)) : Path.GetFileNameWithoutExtension(first)
+                    : "Archive";
+                _destination = _suggestedDestination = UniqueDestination(folder, name, _formatIndex == 1 ? ".7z" : ".zip");
+            }
+            Invalidate();
+        }
+        catch (Exception error) { if (!_disposed) { _dialogError = FriendlyError(error); Invalidate(); } }
+    }
+    private void ClearCreateInputs()
+    {
+        _sources = [];
+        Invalidate();
     }
     private void PrepareExtract()
     {
@@ -326,7 +417,7 @@ public partial class MainWindow
             : null;
         _password = _snapshot?.ArchivePath is not null ? _archivePassword ?? "" : "";
         _destination = UniqueDestination(Path.GetDirectoryName(_operationArchive)!, ArchiveBaseName(_operationArchive), "");
-        _dialogError = ""; _panel = DialogKind.Extract; Invalidate();
+        _extractPathIndex = 1; _dialogError = ""; _panel = DialogKind.Extract; Invalidate();
     }
     private void PrepareTest()
     {
@@ -336,28 +427,44 @@ public partial class MainWindow
         _password = _snapshot?.ArchivePath is not null ? _archivePassword ?? "" : "";
         _dialogError = ""; _panel = DialogKind.Test; Invalidate();
     }
-    private void ChooseDestination()
+    private async void ChooseDestination()
     {
+        if (_pickerBusy || _busy) return;
         try
         {
             if (_panel == DialogKind.Create)
             {
                 var suggested = Path.ChangeExtension(Path.GetFileName(_destination), _formatIndex == 1 ? ".7z" : ".zip");
-                if (Desktop.ChooseSavePath(suggested, Path.GetDirectoryName(_destination)) is { } path) _destination = path;
+                var directory = Path.GetDirectoryName(_destination);
+                var path = await ShowPickerAsync(() => Desktop.ChooseSavePath(suggested, directory));
+                if (_disposed) return;
+                if (path is not null) _destination = path;
             }
-            else if (Desktop.ChooseFolder(Path.GetDirectoryName(_destination)) is { } folder)
-                _destination = UniqueDestination(folder, ArchiveBaseName(_operationArchive), "");
+            else
+            {
+                var directory = Path.GetDirectoryName(_destination);
+                var folder = await ShowPickerAsync(() => Desktop.ChooseFolder(directory));
+                if (_disposed) return;
+                if (folder is not null) _destination = UniqueDestination(folder, ArchiveBaseName(_operationArchive), "");
+            }
             Invalidate();
         }
-        catch (Exception error) { _dialogError = FriendlyError(error); Invalidate(); }
+        catch (Exception error) { if (!_disposed) { _dialogError = FriendlyError(error); Invalidate(); } }
     }
-    private void CloseDialog() { if (!_busy) { _panel = DialogKind.None; _password = ""; _dialogError = ""; Invalidate(); } }
+    private void CloseDialog() { if (!_busy && !_pickerBusy) { _panel = DialogKind.None; _password = ""; _passwordConfirm = ""; _dialogError = ""; Invalidate(); } }
+    private void DismissDialog() { if (_panel == DialogKind.Progress) CancelOperation(); else CloseDialog(); }
     private async void ConfirmDialog()
     {
-        if (_busy || _panel is DialogKind.None or DialogKind.Progress) return;
+        if (_busy || _pickerBusy || _panel is DialogKind.None or DialogKind.Progress) return;
         var mode = _panel;
         try
         {
+            if (mode == DialogKind.EntryPassword)
+            {
+                if (PasswordOrNull is null) throw new InvalidOperationException("请输入密码。");
+                await OpenArchiveFileAsync(_passwordEntry!, PasswordOrNull, DialogKind.EntryPassword);
+                return;
+            }
             if (mode == DialogKind.Unlock)
             {
                 await NavigateToAsync(_operationArchive, password: PasswordOrNull);
@@ -365,10 +472,15 @@ public partial class MainWindow
             }
             if (mode is DialogKind.Create or DialogKind.AddToArchive && _sources.Length == 0)
                 throw new InvalidOperationException("请先选择要压缩的文件或文件夹。");
+            if (mode == DialogKind.Create && _password != _passwordConfirm)
+                throw new InvalidOperationException("两次输入的密码不一致。");
             if (mode == DialogKind.Create && _formatIndex == 1 && _encryptNames && PasswordOrNull is null)
                 throw new InvalidOperationException("加密文件名需要先设置密码。");
             if (mode is DialogKind.Create or DialogKind.Extract && string.IsNullOrWhiteSpace(_destination)) throw new InvalidOperationException("请选择输出路径。");
-            var password = mode == DialogKind.Create && _formatIndex == 0 ? null : PasswordOrNull;
+            var password = PasswordOrNull;
+            var createSettings = new ArchiveCreateSettings(Levels[_compressionLevelIndex + (_formatIndex == 1 ? 1 : 0)],
+                _zipEncryptionIndex == 1 ? ZipEncryptionMethod.ZipCrypto : ZipEncryptionMethod.Aes256);
+            var extractSettings = new ArchiveExtractSettings((ExtractionPathMode)_extractPathIndex, _snapshot?.ArchivePrefix ?? "");
             var destination = mode is DialogKind.Create or DialogKind.Extract ? Path.GetFullPath(_destination) : "";
             if (mode == DialogKind.Create) destination = Path.ChangeExtension(destination, _formatIndex == 1 ? ".7z" : ".zip");
             var progress = new Progress<ArchiveOperationProgress>(report =>
@@ -381,8 +493,8 @@ public partial class MainWindow
             {
                 if (mode == DialogKind.Create) await FileService.CreateAsync(_sources, destination,
                     _formatIndex == 1 ? ArchiveFormat.SevenZip : ArchiveFormat.Zip, password,
-                    _formatIndex == 1 && _encryptNames, progress, token);
-                else if (mode == DialogKind.Extract) await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, progress, token);
+                    _formatIndex == 1 && _encryptNames, progress, token, createSettings);
+                else if (mode == DialogKind.Extract) await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, progress, token, extractSettings);
                 else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, progress, token);
                 else if (mode == DialogKind.AddToArchive) await ArchiveEditor.AddAsync(_operationArchive, _sources, _replaceExisting,
                     password, progress, token, archiveDirectory: _editDirectory);
@@ -394,18 +506,19 @@ public partial class MainWindow
                 DialogKind.Extract => "提取完成。", DialogKind.AddToArchive => "压缩包已更新。",
                 DialogKind.DeleteEntries => "所选归档项目已删除。", _ => "重命名完成。",
             }, mode);
-            if (completed && mode is DialogKind.Create or DialogKind.Extract)
+            if (completed && mode == DialogKind.Extract && !_disposed)
             {
-                var message = StatusMessage;
-                await NavigateToAsync(mode == DialogKind.Create ? Path.GetDirectoryName(destination)! : destination);
-                StatusMessage = message; Invalidate();
+                try { Desktop.Open(destination); }
+                catch (Exception error)
+                {
+                    ReportError(new IOException($"解压已完成，但无法打开输出文件夹：{FriendlyError(error)}", error));
+                }
             }
-            else if (completed && mode is DialogKind.AddToArchive or DialogKind.DeleteEntries or DialogKind.Rename)
+            if (completed && mode is DialogKind.AddToArchive or DialogKind.DeleteEntries or DialogKind.Rename)
             {
                 var message = StatusMessage;
                 if (_snapshot?.ArchivePath is { } archivePath)
                     await NavigateToAsync(archivePath, _snapshot.ArchivePrefix, password, remember: false);
-                else if (_snapshot is not null) await NavigateToAsync(_snapshot.DirectoryPath, remember: false);
                 StatusMessage = message; Invalidate();
             }
         }
@@ -424,105 +537,22 @@ public partial class MainWindow
         {
             await _operations.RunAsync(action, cancellation.Token);
             if (_disposed) return false;
-            StatusMessage = success; _panel = DialogKind.None; _password = ""; return true;
+            StatusMessage = success; _panel = DialogKind.None; _password = ""; _passwordConfirm = ""; return true;
         }
-        catch (OperationCanceledException) { if (!_disposed) { StatusMessage = "操作已取消"; _panel = DialogKind.None; _password = ""; } return false; }
+        catch (OperationCanceledException) { if (!_disposed) { StatusMessage = "操作已取消"; _panel = DialogKind.None; _password = ""; _passwordConfirm = ""; } return false; }
         catch (Exception error) { if (!_disposed) { _panel = returnPanel; _dialogError = FriendlyError(error); if (returnPanel == DialogKind.None) _error = _dialogError; } return false; }
         finally { _operationCancellation = null; _busy = false; Invalidate(); }
     }
     private void CancelOperation() { _cancelRequested = true; _operationCancellation?.Cancel(); Invalidate(); }
 
-    private async void CopySelected()
+    private void CopySelected() => PrepareExtract();
+    private void TrashSelected()
     {
-        if (_snapshot?.ArchivePath is not null) PrepareExtract();
-        else await TransferSelectedAsync(false);
-    }
-    private async void MoveSelected() => await TransferSelectedAsync(true);
-    private async Task TransferSelectedAsync(bool move)
-    {
-        if (!CanManageFiles) return;
-        try
-        {
-            var rows = SelectedRows.Select(row => row with { Path = ArchivePaths.ResolveUserPath(row.Path) }).ToArray();
-            if (Desktop.ChooseFolder(_snapshot?.DirectoryPath) is not { } selectedFolder) return;
-            var folder = ArchivePaths.ResolveUserPath(selectedFolder);
-            await RunOperationAsync(token => Task.Run(() =>
-            {
-                var targets = rows.Select(row => (row, target: Path.Combine(folder, row.Name))).ToArray();
-                foreach (var (row, target) in targets)
-                {
-                    if (row.IsLink) throw new NotSupportedException("暂不支持复制或移动符号链接。");
-                    RejectLinkedAncestors(row.Path);
-                    RejectLinkedAncestors(folder);
-                    if (File.Exists(target) || Directory.Exists(target)) throw new IOException($"目标已存在：{row.Name}");
-                    if (row.IsDirectory && (string.Equals(Path.GetFullPath(folder), Path.GetFullPath(row.Path), StringComparison.OrdinalIgnoreCase) ||
-                        Path.GetFullPath(folder).StartsWith(Path.GetFullPath(row.Path) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
-                        throw new IOException("目标文件夹不能位于源文件夹内。");
-                }
-                foreach (var (row, target) in targets)
-                {
-                    token.ThrowIfCancellationRequested();
-                    if (move) { if (row.IsDirectory) Directory.Move(row.Path, target); else File.Move(row.Path, target); }
-                    else
-                    {
-                        var staging = Path.Combine(folder, ".EclipseArchive-copy-" + Guid.NewGuid().ToString("N"));
-                        try
-                        {
-                            CopyFileOrDirectory(row.Path, staging, token);
-                            token.ThrowIfCancellationRequested();
-                            if (row.IsDirectory) Directory.Move(staging, target); else File.Move(staging, target);
-                        }
-                        finally
-                        {
-                            if (Directory.Exists(staging)) Directory.Delete(staging, true);
-                            else if (File.Exists(staging)) File.Delete(staging);
-                        }
-                    }
-                }
-            }, token), move ? "所选项目已移动。" : "所选项目已复制。");
-            await RefreshPreservingStatusAsync();
-        }
-        catch (Exception error) { ReportError(error); }
-    }
-    private static void CopyFileOrDirectory(string source, string target, CancellationToken token)
-    {
-        var info = new FileInfo(source);
-        if (info.LinkTarget is not null || (File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0) throw new NotSupportedException("暂不支持复制符号链接。");
-        token.ThrowIfCancellationRequested();
-        if (!Directory.Exists(source))
-        {
-            using var input = File.OpenRead(source);
-            using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
-            var buffer = new byte[64 * 1024];
-            int length;
-            while ((length = input.Read(buffer)) > 0)
-            {
-                token.ThrowIfCancellationRequested(); output.Write(buffer, 0, length);
-            }
-            token.ThrowIfCancellationRequested();
-            return;
-        }
-        Directory.CreateDirectory(target);
-        foreach (var path in Directory.EnumerateFileSystemEntries(source)) CopyFileOrDirectory(path, Path.Combine(target, Path.GetFileName(path)), token);
-    }
-    private async void TrashSelected()
-    {
-        if (CanEditArchive && HasSelection)
-        {
-            _operationArchive = _snapshot!.ArchivePath!; _editEntries = SelectedRows.Select(row => row.Path).ToArray();
-            _password = _archivePassword ?? ""; _dialogError = ""; _panel = DialogKind.DeleteEntries;
-            Invalidate(); return;
-        }
-        if (!CanManageFiles) return;
-        try
-        {
-            var rows = SelectedRows;
-            if (!Desktop.Confirm("移到废纸篓", $"将选中的 {rows.Length} 个项目移到废纸篓？", "移到废纸篓")) return;
-            try { Desktop.Trash(rows.Select(row => row.Path).ToArray()); StatusMessage = "所选项目已移到废纸篓。"; }
-            catch (Exception error) { ReportError(error); }
-            await RefreshPreservingStatusAsync();
-        }
-        catch (Exception error) { ReportError(error); }
+        if (!CanDelete) return;
+        _operationArchive = _snapshot!.ArchivePath!;
+        _editEntries = SelectedRows.Select(row => row.Path).ToArray();
+        _password = _archivePassword ?? "";
+        _dialogError = ""; _panel = DialogKind.DeleteEntries; Invalidate();
     }
 
     private ArchiveEditService ArchiveEditor => EditService ??= new ArchiveEditService(Engine, FileService);
@@ -535,50 +565,24 @@ public partial class MainWindow
         _password = _archivePassword ?? ""; _dialogError = ""; _panel = DialogKind.Rename; Invalidate();
     }
 
-    private async Task RenameSelectedAsync(string newName, string? password, IProgress<ArchiveOperationProgress> progress, CancellationToken token)
+    private Task RenameSelectedAsync(string newName, string? password, IProgress<ArchiveOperationProgress> progress, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(newName) || newName is "." or ".." || newName.IndexOfAny(['/', '\\', '\0']) >= 0)
             throw new ArgumentException("请输入不包含路径分隔符的名称。");
-        if (_operationArchive.Length > 0)
-            await ArchiveEditor.RenameAsync(_operationArchive, _editEntries[0], newName, password, progress, token).ConfigureAwait(false);
-        else
-        {
-            var source = _editEntries[0];
-            var destination = Path.Combine(Path.GetDirectoryName(source)!, newName);
-            if (source == destination) return;
-            RejectLinkedAncestors(source);
-            if (File.Exists(destination) || Directory.Exists(destination)) throw new IOException("该名称已经存在。");
-            token.ThrowIfCancellationRequested();
-            if (Directory.Exists(source)) Directory.Move(source, destination); else File.Move(source, destination);
-        }
+        return ArchiveEditor.RenameAsync(_operationArchive, _editEntries[0], newName, password, progress, token);
     }
 
-    private async Task RefreshPreservingStatusAsync()
-    {
-        if (_disposed || _snapshot is null) return;
-        var status = StatusMessage;
-        var error = _error;
-        try { await NavigateToAsync(_snapshot.DirectoryPath, remember: false); }
-        finally { StatusMessage = status; _error = error; Invalidate(); }
-    }
-
-    private static void RejectLinkedAncestors(string path)
-    {
-        path = ArchivePaths.ResolveUserPath(path);
-        FileSystemInfo? info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
-        while (info is not null)
-        {
-            if (info.LinkTarget is not null || (info.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new NotSupportedException("暂不支持通过符号链接路径复制或移动，请选择文件的实际位置。");
-            info = info is DirectoryInfo directory ? directory.Parent : ((FileInfo)info).Directory;
-        }
-    }
     private void ShowProperties()
     {
         var rows = SelectedRows; if (rows.Length == 0) return;
-        Desktop.ShowMessage("属性", string.Join("\n\n", rows.Take(8).Select(row => $"{row.Name}\n类型：{row.TypeLabel}\n大小：{row.SizeLabel}\n修改时间：{row.ModifiedLabel}\n位置：{row.Path}")));
+        ShowMessageDialog("属性", string.Join("\n\n", rows.Take(8).Select(row => $"{row.Name}\n类型：{row.TypeLabel}\n大小：{row.SizeLabel}\n修改时间：{row.ModifiedLabel}\n位置：{row.Path}")));
     }
-    private void ShowAbout() => Desktop.ShowMessage("关于 EclipseArchive", "基于 EclipseUI 的 macOS 压缩解压工具。\n\n操作：双击或 Return 打开，⌘O 打开压缩包，⌘A 全选，⌘R 刷新，F2 重命名。\n\n支持 ZIP / 7z 创建、修改，以及归档浏览、提取和测试。");
+    private void ShowAbout() => ShowMessageDialog("关于 EclipseArchive", "基于 EclipseUI 的桌面压缩解压工具。\n\n操作：双击或 Enter 打开，Ctrl/⌘+O 打开压缩包，Ctrl/⌘+A 全选，Ctrl/⌘+R 刷新，F2 重命名。\n\n支持 ZIP / 7z 创建、修改，以及归档浏览、提取和测试。");
+    private void ShowMessageDialog(string title, string message)
+    {
+        _messageTitle = title; _messageBody = message; _dialogError = "";
+        _panel = DialogKind.Message; Invalidate();
+    }
     private void HandleKey(RoutedEventArgs args)
     {
         if (args is not KeyEventArgs key) return;
@@ -588,13 +592,13 @@ public partial class MainWindow
             if (_busy) CancelOperation(); else CloseDialog();
             return;
         }
-        if (_panel != DialogKind.None || _busy) return;
+        if (_panel != DialogKind.None || _busy || _pickerBusy) return;
         if (key.Key == Key.F2) { args.Handled = true; PrepareRename(); return; }
         if (key.Modifiers.HasFlag(KeyModifiers.Meta) || key.Modifiers.HasFlag(KeyModifiers.Control))
         {
             if (key.Key == Key.O) { args.Handled = true; ChooseAndOpen(); }
+            else if (key.Key == Key.A) { args.Handled = true; SelectAll(); }
             else if (key.Key == Key.R) { args.Handled = true; Refresh(); }
-            else if (key.Key == Key.L) { args.Handled = true; AddressBox.RequestFocus(); AddressBox.Select(0, AddressBox.Text.Length); }
         }
     }
     private void CycleTheme()

@@ -9,7 +9,8 @@ public sealed class ArchiveFileService(IArchiveEngine engine)
 
     public Task CreateAsync(IReadOnlyList<string> sourcePaths, string destinationPath, ArchiveFormat format,
         string? password = null, bool encryptFileNames = false,
-        IProgress<ArchiveOperationProgress>? progress = null, CancellationToken cancellationToken = default) =>
+        IProgress<ArchiveOperationProgress>? progress = null, CancellationToken cancellationToken = default,
+        ArchiveCreateSettings? settings = null) =>
         Task.Run(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -54,7 +55,13 @@ public sealed class ArchiveFileService(IArchiveEngine engine)
                     return new ArchiveWriteEntry(input.EntryPath, stream, input.LastModified);
                 }).ToArray();
                 await using (var output = OpenWrite(temporary))
-                    await _engine.CreateAsync(output, entries, format, password, encryptFileNames, cancellationToken).ConfigureAwait(false);
+                {
+                    if (settings is not null && _engine is IConfigurableArchiveEngine configurable)
+                        await configurable.CreateWithSettingsAsync(output, entries, format, password, encryptFileNames, settings, cancellationToken).ConfigureAwait(false);
+                    else if (settings is null || settings == new ArchiveCreateSettings())
+                        await _engine.CreateAsync(output, entries, format, password, encryptFileNames, cancellationToken).ConfigureAwait(false);
+                    else throw new NotSupportedException("当前压缩引擎不支持所选压缩选项。");
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 EnsureNoLinks(Path.GetDirectoryName(destination)!);
                 File.Move(temporary, destination, overwrite: false);
@@ -69,13 +76,13 @@ public sealed class ArchiveFileService(IArchiveEngine engine)
 
     public Task ExtractAsync(string archivePath, string destinationDirectory, string? password = null,
         IReadOnlyList<string>? entryPaths = null, IProgress<ArchiveOperationProgress>? progress = null,
-        CancellationToken cancellationToken = default) => Task.Run(async () =>
+        CancellationToken cancellationToken = default, ArchiveExtractSettings? settings = null) => Task.Run(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var destination = ValidateNewDestination(destinationDirectory);
             await using var source = OpenRead(archivePath);
             var allEntries = await ReadPlan(source, password, cancellationToken).ConfigureAwait(false);
-            var entries = SelectEntries(allEntries, entryPaths);
+            var entries = MapExtractionPaths(SelectEntries(allEntries, entryPaths), settings ?? new());
             var temporary = TemporarySibling(destination);
             progress?.Report(new("", 0, entries.Count));
             try
@@ -196,6 +203,32 @@ public sealed class ArchiveFileService(IArchiveEngine engine)
             if (!entries.Any(entry => Matches(entry.RelativePath, selection)))
                 throw new FileNotFoundException($"Archive entry was not found: {selection}", selection);
         return entries.Where(entry => selected.Any(selection => Matches(entry.RelativePath, selection))).ToList();
+    }
+
+    private static List<PlannedEntry> MapExtractionPaths(List<PlannedEntry> entries, ArchiveExtractSettings settings)
+    {
+        if (!Enum.IsDefined(settings.PathMode)) throw new ArgumentOutOfRangeException(nameof(settings));
+        var prefix = string.IsNullOrEmpty(settings.CurrentPrefix) ? "" : NormalizeEntryPath(settings.CurrentPrefix);
+        var mapped = new List<PlannedEntry>(entries.Count);
+        foreach (var entry in entries)
+        {
+            var path = entry.RelativePath;
+            if (settings.PathMode == ExtractionPathMode.CurrentFolder && prefix.Length > 0)
+            {
+                if (path == prefix && entry.Info.IsDirectory) continue;
+                if (!path.StartsWith(prefix + "/", StringComparison.Ordinal))
+                    throw new InvalidDataException("所选条目不在当前压缩包目录中。");
+                path = path[(prefix.Length + 1)..];
+            }
+            else if (settings.PathMode == ExtractionPathMode.NoPaths)
+            {
+                if (entry.Info.IsDirectory) continue;
+                path = path[(path.LastIndexOf('/') + 1)..];
+            }
+            mapped.Add(entry with { RelativePath = path });
+        }
+        ValidateEntryTree(mapped.Select(entry => (entry.RelativePath, entry.Info.IsDirectory)));
+        return mapped;
     }
 
     private static void AddSource(string path, string entryPath, List<SourceEntry> entries, CancellationToken cancellationToken)

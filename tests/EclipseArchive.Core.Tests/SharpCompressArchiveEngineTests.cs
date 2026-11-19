@@ -259,16 +259,14 @@ public sealed class SharpCompressArchiveEngineTests
     }
 
     [Fact]
-    public async Task ZipPasswordCreationIsExplicitlyUnsupported()
+    public async Task ZipHeaderEncryptionIsRejectedBeforeWriting()
     {
         using var content = new MemoryStream(FileContent);
         using var archive = new MemoryStream();
-
-        await Assert.ThrowsAsync<NotSupportedException>(() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
             _engine.CreateAsync(archive, [new ArchiveWriteEntry(FileName, content)],
-                ArchiveFormat.Zip, Password));
-
-        Assert.Equal(0L, archive.Length);
+                ArchiveFormat.Zip, Password, encryptFileNames: true));
+        Assert.Equal  (0L, archive.Length);
         Assert.Equal(0L, content.Position);
         Assert.True(content.CanRead);
         Assert.True(archive.CanWrite);

@@ -9,6 +9,7 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
     <ProjectReference Include="../../src/EclipseArchive/EclipseArchive.csproj" />
+    <ProjectReference Include="../../src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj" />
     <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering.Vello/EclipseUI.Rendering.Vello.csproj" />
   </ItemGroup>
 </Project>

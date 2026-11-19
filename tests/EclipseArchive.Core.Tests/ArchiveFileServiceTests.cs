@@ -138,10 +138,10 @@ public sealed class ArchiveFileServiceTests : IDisposable
     {
         var source = Path.Combine(_root, "source.txt");
         await File.WriteAllTextAsync(source, "source");
-        var archive = Path.Combine(_root, "unsupported.zip");
+        var archive = Path.Combine(_root, "unsupported.7z");
 
         await Assert.ThrowsAsync<NotSupportedException>(() =>
-            _service.CreateAsync([source], archive, ArchiveFormat.Zip, password: "unsupported"));
+            _service.CreateAsync([source], archive, ArchiveFormat.SevenZip, settings: new(ArchiveCompressionLevel.Store)));
 
         Assert.False(File.Exists(archive));
         AssertNoTemporaryOutputs();

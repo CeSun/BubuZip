@@ -5,10 +5,12 @@ using SharpCompress.Readers;
 using SharpCompress.Writers;
 using SharpCompress.Writers.SevenZip;
 using SharpCompress.Writers.Zip;
+using SharpCompress.Compressors.LZMA;
+using ICSharpCode.SharpZipLib.Zip;
 
 namespace EclipseArchive.Core;
 
-public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine
+public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine, IConfigurableArchiveEngine
 {
     public Task CreateAsync(
         Stream destination,
@@ -17,6 +19,11 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine
         string? password = null,
         bool encryptFileNames = false,
         CancellationToken cancellationToken = default)
+        => CreateWithSettingsAsync(destination, entries, format, password, encryptFileNames, new(), cancellationToken);
+
+    public Task CreateWithSettingsAsync(Stream destination, IReadOnlyList<ArchiveWriteEntry> entries,
+        ArchiveFormat format, string? password, bool encryptFileNames, ArchiveCreateSettings settings,
+        CancellationToken cancellationToken = default)
     {
         // Async codecs can still perform CPU work synchronously before their first await.
         return Task.Run(async () =>
@@ -24,6 +31,7 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine
             cancellationToken.ThrowIfCancellationRequested();
             ArgumentNullException.ThrowIfNull(destination);
             ArgumentNullException.ThrowIfNull(entries);
+            ArgumentNullException.ThrowIfNull(settings);
             if (!destination.CanWrite)
                 throw new ArgumentException("The destination stream must be writable.", nameof(destination));
             if (destination.CanSeek && (destination.Position != 0 || destination.Length != 0))
@@ -34,8 +42,12 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine
                 throw new ArgumentException("7z requires a seekable destination stream.", nameof(destination));
             if (password is "")
                 throw new ArgumentException("Use null for an archive without a password.", nameof(password));
-            if (format == ArchiveFormat.Zip && password is not null)
-                throw new NotSupportedException("This SharpCompress version cannot create password-protected ZIP archives. Use 7z instead.");
+            if (!Enum.IsDefined(settings.CompressionLevel) || !Enum.IsDefined(settings.ZipEncryption))
+                throw new ArgumentOutOfRangeException(nameof(settings));
+            if (format == ArchiveFormat.SevenZip && settings.CompressionLevel == ArchiveCompressionLevel.Store)
+                throw new NotSupportedException("7z 暂不支持仅存储模式。");
+            if (format == ArchiveFormat.Zip && password is not null && settings.ZipEncryption == ZipEncryptionMethod.ZipCrypto && password.Any(character => character > 0x7f))
+                throw new ArgumentException("ZipCrypto 密码仅支持 ASCII 字符；使用中文密码请选择 AES-256。", nameof(password));
             if (encryptFileNames && (format != ArchiveFormat.SevenZip || password is null))
                 throw new ArgumentException("Hiding filenames requires a password-protected 7z archive.", nameof(encryptFileNames));
 
@@ -54,17 +66,26 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine
                 return entry with { EntryPath = name };
             }).ToArray();
 
+            if (format == ArchiveFormat.Zip && password is not null)
+            {
+                await WriteEncryptedZipAsync(destination, inputs, password, settings, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
+            }
+
             IWriterOptions options = format == ArchiveFormat.SevenZip
                 ? new SevenZipWriterOptions(CompressionType.LZMA2)
                 {
                     Password = password,
                     EncryptHeader = encryptFileNames,
                     LeaveStreamOpen = true,
+                    LzmaProperties = LzmaPreset(settings.CompressionLevel),
                 }
-                : new ZipWriterOptions(CompressionType.Deflate)
+                : new ZipWriterOptions(settings.CompressionLevel == ArchiveCompressionLevel.Store ? CompressionType.None : CompressionType.Deflate)
                 {
                     UseZip64 = true,
                     LeaveStreamOpen = true,
+                    CompressionLevel = settings.CompressionLevel == ArchiveCompressionLevel.Store ? 0 : (int)settings.CompressionLevel,
                 };
             var archiveType = format == ArchiveFormat.SevenZip ? ArchiveType.SevenZip : ArchiveType.Zip;
 
@@ -84,6 +105,41 @@ public sealed class SharpCompressArchiveEngine : IBatchArchiveEngine
             // 7z writes its directory and final header during DisposeAsync, which is not cancellable.
             cancellationToken.ThrowIfCancellationRequested();
         }, cancellationToken);
+    }
+
+    private static LzmaEncoderProperties LzmaPreset(ArchiveCompressionLevel level) => level switch
+    {
+        ArchiveCompressionLevel.Fastest => new(false, 1 << 18, 16),
+        ArchiveCompressionLevel.Fast => new(false, 1 << 19, 24),
+        ArchiveCompressionLevel.Normal => new(false, 1 << 20, 32),
+        ArchiveCompressionLevel.Maximum => new(false, 1 << 22, 48),
+        ArchiveCompressionLevel.Ultra => new(false, 1 << 23, 64),
+        _ => throw new ArgumentOutOfRangeException(nameof(level)),
+    };
+
+    private static async Task WriteEncryptedZipAsync(Stream destination, IReadOnlyList<ArchiveWriteEntry> entries,
+        string password, ArchiveCreateSettings settings, CancellationToken cancellationToken)
+    {
+        using var writer = new ZipOutputStream(destination) { IsStreamOwner = false, UseZip64 = UseZip64.Dynamic, NameTransform = null };
+        writer.SetLevel((int)settings.CompressionLevel);
+        foreach (var input in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var directory = input.Content is null;
+            writer.Password = directory ? null : password;
+            var entry = new ICSharpCode.SharpZipLib.Zip.ZipEntry(directory ? input.EntryPath.TrimEnd('/') + "/" : input.EntryPath)
+            {
+                IsUnicodeText = true,
+                AESKeySize = !directory && settings.ZipEncryption == ZipEncryptionMethod.Aes256 ? 256 : 0,
+                CompressionMethod = settings.CompressionLevel == ArchiveCompressionLevel.Store || directory
+                    ? ICSharpCode.SharpZipLib.Zip.CompressionMethod.Stored : ICSharpCode.SharpZipLib.Zip.CompressionMethod.Deflated,
+            };
+            if (input.LastModified is { } modified && modified.Year is >= 1980 and <= 2107) entry.DateTime = modified.ToLocalTime();
+            writer.PutNextEntry(entry);
+            if (input.Content is not null) await input.Content.CopyToAsync(writer, 81920, cancellationToken).ConfigureAwait(false);
+            writer.CloseEntry();
+        }
+        writer.Finish();
     }
 
     public Task<IReadOnlyList<ArchiveEntryInfo>> ListAsync(

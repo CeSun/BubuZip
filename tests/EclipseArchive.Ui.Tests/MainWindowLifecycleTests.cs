@@ -19,10 +19,10 @@ public sealed class MainWindowLifecycleTests
     {
         using var engine = new BlockingCreateEngine();
         using var fixture = new LifecycleFixture(engine);
-        fixture.WriteFile("正在处理.txt", "关闭窗口前必须清理的内容");
+        fixture.Desktop.Inputs = [fixture.WriteFile("正在处理.txt", "关闭窗口前必须清理的内容")];
         fixture.OpenWindow();
-        fixture.Select("正在处理.txt");
-        fixture.Click("＋ 添加");
+        fixture.Click("新建压缩");
+        fixture.Click("选择文件…");
         fixture.Click("开始");
 
         Assert.True(engine.Entered.Wait(TimeSpan.FromSeconds(5)), "The archive writer did not start.");
@@ -43,11 +43,11 @@ public sealed class MainWindowLifecycleTests
     {
         using var fixture = new LifecycleFixture();
         const string text = "已经提交的输出应当被报告为成功。";
-        fixture.WriteFile("提交.txt", text);
+        fixture.Desktop.Inputs = [fixture.WriteFile("提交.txt", text)];
         var archivePath = Path.Combine(fixture.DirectoryPath, "提交.zip");
         fixture.OpenWindow();
-        fixture.Select("提交.txt");
-        fixture.Click("＋ 添加");
+        fixture.Click("新建压缩");
+        fixture.Click("选择文件…");
         fixture.Click("开始");
 
         // Observe the actual File.Move commit, while intentionally withholding the UI continuation.
@@ -69,6 +69,27 @@ public sealed class MainWindowLifecycleTests
         Assert.DoesNotContain("操作已取消", fixture.Texts());
     }
 
+    [Fact]
+    public void CancellingExtractionDoesNotOpenAnOutputFolder()
+    {
+        using var engine = new BlockingExtractEngine();
+        using var fixture = new LifecycleFixture(engine);
+        var archive = Path.Combine(fixture.DirectoryPath, "archive.zip");
+        using (var output = File.Create(archive))
+        using (var content = new MemoryStream(Encoding.UTF8.GetBytes("content")))
+            new SharpCompressArchiveEngine().CreateAsync(output, [new ArchiveWriteEntry("file.txt", content)]).GetAwaiter().GetResult();
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow();
+        fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Click("提取"); fixture.Click("开始");
+        Assert.True(engine.Entered.Wait(TimeSpan.FromSeconds(5)), "The archive reader did not start.");
+        fixture.Click("取消"); fixture.WaitForIdle();
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+        Assert.False(Directory.Exists(Path.Combine(fixture.DirectoryPath, "archive")));
+        Assert.Equal("操作已取消", fixture.Window.StatusMessage);
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+    }
+
     [Theory]
     [InlineData("损坏.zip")]
     [InlineData("不支持.txt")]
@@ -79,13 +100,13 @@ public sealed class MainWindowLifecycleTests
         fixture.Desktop.ArchiveChoice = path;
         fixture.OpenWindow();
 
-        fixture.Click("打开…");
+        fixture.Click("打开压缩");
         fixture.WaitForIdle();
 
-        Assert.Null(fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Null(fixture.Window.CurrentLocation);
         Assert.Empty(fixture.Elements<PasswordBox>());
         Assert.DoesNotContain("打开压缩包", fixture.Texts());
-        Assert.Contains(fixture.Elements<Button>(), button => button.GetType() == typeof(Button) && button.Label == "关闭");
+        Assert.Contains(fixture.Elements<Button>(), button => button is not MenuItem && button.Label == "关闭");
         Assert.False(fixture.Window.TaskIsRunning);
     }
 
@@ -102,10 +123,10 @@ public sealed class MainWindowLifecycleTests
         fixture.Desktop.ArchiveChoice = path;
         fixture.OpenWindow();
 
-        fixture.Click("打开…");
+        fixture.Click("打开压缩");
         fixture.WaitForIdle();
 
-        Assert.Null(fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Null(fixture.Window.CurrentLocation);
         Assert.Contains("打开压缩包", fixture.Texts());
         var passwordBox = Assert.Single(fixture.Elements<PasswordBox>());
         passwordBox.Text = password;
@@ -144,7 +165,7 @@ public sealed class MainWindowLifecycleTests
             Host.Content.SetThemeDefaults(FluentTheme.Light);
             _ui = Host.InstallSynchronizationContext();
             Host.UpdateLayout();
-            Files = Assert.Single(Elements<ListBox>());
+            Files = Elements<ArchivePane>().Last().Files;
         }
 
         public IEnumerable<T> Elements<T>() where T : Element => Host.Content.Descendants().OfType<T>();
@@ -152,7 +173,7 @@ public sealed class MainWindowLifecycleTests
 
         public void Click(string label)
         {
-            var button = Assert.Single(Elements<Button>(), button => button.GetType() == typeof(Button) && button.Label == label);
+            var button = Assert.Single(Elements<Button>(), button => button is not MenuItem && button.Label == label);
             Assert.True(button.IsEffectiveEnabled);
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Host.UpdateLayout();
@@ -246,17 +267,38 @@ public sealed class MainWindowLifecycleTests
         public void Dispose() { Entered.Dispose(); Cleaned.Dispose(); }
     }
 
+    private sealed class BlockingExtractEngine : IArchiveEngine, IDisposable
+    {
+        private readonly IArchiveEngine _inner = new SharpCompressArchiveEngine();
+        public ManualResetEventSlim Entered { get; } = new();
+        public Task CreateAsync(Stream destination, IReadOnlyList<ArchiveWriteEntry> entries,
+            ArchiveFormat format = ArchiveFormat.Zip, string? password = null, bool encryptFileNames = false,
+            CancellationToken cancellationToken = default) =>
+            _inner.CreateAsync(destination, entries, format, password, encryptFileNames, cancellationToken);
+        public Task<IReadOnlyList<ArchiveEntryInfo>> ListAsync(Stream source, string? password = null,
+            CancellationToken cancellationToken = default) => _inner.ListAsync(source, password, cancellationToken);
+        public async Task ExtractEntryAsync(Stream source, string entryPath, Stream destination, string? password = null,
+            CancellationToken cancellationToken = default)
+        {
+            Entered.Set();
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+        }
+        public void Dispose() => Entered.Dispose();
+    }
+
     private sealed class FakeDesktopServices : IDesktopServices
     {
         public string? ArchiveChoice { get; set; }
-        public IReadOnlyList<string> ChooseInputs() => [];
+        public List<string> OpenedPaths { get; } = [];
+        public IReadOnlyList<string> Inputs { get; set; } = [];
+        public IReadOnlyList<string> ChooseInputs() => Inputs;
         public string? ChooseArchive() => ArchiveChoice;
         public string? ChooseFolder(string? initialDirectory = null) => null;
         public string? ChooseSavePath(string suggestedName, string? initialDirectory = null) => null;
         public bool Confirm(string title, string message, string confirmLabel) => false;
         public void ShowMessage(string title, string message) { }
         public void Reveal(string path) { }
-        public void Open(string path) { }
+        public void Open(string path) => OpenedPaths.Add(path);
         public void Trash(IReadOnlyList<string> paths) { }
     }
 }

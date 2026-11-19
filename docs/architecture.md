@@ -1,8 +1,8 @@
 # 架构说明
 
-EclipseArchive 是独立的 .NET 10 应用仓库，首版目标为 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
+EclipseArchive 是独立的 .NET 10 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
 
-当前已连接文件浏览 UI、SharpCompress 流式引擎、磁盘文件工作流与 macOS 原生桌面服务。操作布局参考 NanaZip 的菜单、工具栏和文件管理组织，样式使用 EclipseUI Fluent。
+应用首页提供新建压缩和打开压缩两个入口。选择压缩包后显示归档内容，归档浏览、SharpCompress 流式引擎、磁盘文件工作流与跨平台桌面服务相互独立。
 
 ## 当前工程
 
@@ -12,7 +12,7 @@ EclipseArchive/
 ├── src/
 │   ├── EclipseArchive.Core/        流式引擎、磁盘文件服务与进度模型
 │   ├── EclipseArchive/             主窗口、文件列表与浏览服务
-│   └── EclipseArchive.Desktop/     macOS 入口、原生桌面服务与预览
+│   └── EclipseArchive.Desktop/     跨平台入口、原生桌面服务与预览
 ├── tests/
 │   ├── EclipseArchive.Core.Tests/  引擎与文件服务测试
 │   └── EclipseArchive.Ui.Tests/    浏览和主窗口交互测试
@@ -26,9 +26,13 @@ EclipseArchive/
 
 `src/EclipseArchive` 包含 `MainWindow.ui` 与对应交互代码、`FileListBox`、`BrowserService`，以及 `IDesktopServices` 接口。它引用 Core 和子模块中的 Runtime、Rendering、主题及 `.ui` 编译生成器。
 
-`src/EclipseArchive.Desktop` 是可执行项目，包含应用生命周期对象，负责 macOS 平台、Vello 渲染、HarfBuzz 文本、主题和服务的装配。`MacDesktopServices` 通过 AppKit/Objective-C 提供原生选择、保存和信息/确认面板，并实现 Finder 显示、系统打开与废纸篓操作。原生对话框及桌面窗口在 Cocoa 主线程调用。
+`ArchivePane` 保存当前归档的浏览快照、密码、排序、历史与选择。`MainWindow.NavigateToAsync` 拒绝本地目录；上一级在归档根目录停止，切换归档时清空历史，路径栏为只读，返回首页清空当前归档。后台操作及模态对话框期间禁止切换操作目标。`ArchiveControls` 提供跨平台矢量图标、平面命令按钮、只读路径栏和列分隔线；不修改 EclipseUI 子模块。
 
-启动参数 `--path folder` 指定初始目录；`--frames 3` 用于运行有限循环次数后退出；`--shot image.png` 使用与窗口相同的 Vello Sparse 软件栅格后端导出测试预览，不创建桌面窗口。
+归档浏览界面的参考来自相邻 NanaZip 仓库的 `NanaZip.Modern/MainWindowToolBarPage.xaml`、`StatusBarTemplate.xaml` 和 `Documents/MainWindowLightMode.png`、`MainWindowDarkMode.png`。应用保留 EclipseArchive 名称和现有 ZIP/7z 能力，标题栏和文件选择由宿主操作系统提供。性能测试使用内存中的 4 MiB 数据执行 ZIP 压缩、解压并校验，数值不等同于 NanaZip 的 LZMA 基准。
+
+`src/EclipseArchive.Desktop` 是可执行项目，根据系统装配 Win32、Linux SDL3 或 macOS 宿主，以及 Vello 渲染、HarfBuzz 文本、主题和桌面服务。`MacDesktopServices` 通过 AppKit/Objective-C 提供原生面板及废纸篓，Cocoa 调用保持在主线程；`WindowsDesktopServices` 使用 Windows PowerShell 的 WinForms 文件面板、Win32 信息框和 Shell 回收站；`LinuxDesktopServices` 使用 `zenity`、`gio` 和 `xdg-open`。Windows 和 Linux 的选择面板在后台等待，界面线程继续处理窗口消息，面板打开期间禁止重复操作；macOS 原生面板继续运行在 Cocoa 主线程。外部程序参数通过参数数组传递，用户路径不会交给 shell 解释。Linux 窗口使用 Vulkan；Windows 和 macOS 使用 Sparse 软件栅格及系统图形表面。
+
+启动参数 `--path folder` 指定创建压缩包时的初始建议目录，不会浏览该目录；`--frames 3` 用于运行有限循环次数后退出；`--shot image.png` 导出离屏测试预览，不创建桌面窗口。
 
 构建入口为 `dotnet build EclipseArchive.slnx`，运行入口为 `dotnet run --project src/EclipseArchive.Desktop`，测试命令为 `dotnet test EclipseArchive.slnx`。窗口启动检查与 Core 行为测试分别验证应用入口和压缩引擎。
 
@@ -48,23 +52,23 @@ git submodule update --init --recursive
 
 当前原生对话框由应用的桌面服务提供，EclipseUI 子模块保持独立。窗口、布局、输入和主题能力由框架提供，归档操作与文件管理交互由应用维护。
 
-应用使用的 EclipseUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`，本应用显式开启它，以避开当前 VelloSharp GPU 栅格路径在本机重复绘制时复现的黑块。`VelloSparseBackend` 通过 `SparseRenderContext` 在 CPU 上生成 RGBA 像素；Metal 负责纹理上传和全屏三角形呈现。变化帧完整软件栅格化并上传，空闲帧仍由宿主跳过，元素绘制命令缓存继续保留；此模式不使用 GPU 局部光栅或原生场景片段缓存。软件后端尚无模糊指令，阴影仅绘制偏移后的轮廓，能力标识不包含 `Blur`。
+应用使用的 EclipseUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`。Windows 和 macOS 使用软件栅格化并由对应平台的图形表面呈现；Linux 使用 Vulkan 后端。软件后端尚无模糊指令，阴影仅绘制偏移后的轮廓，能力标识不包含 `Blur`。
 
 窗口像素回归使用真实 `MainWindow` 的布局与裁剪，分别覆盖浅色、深色以及 1 倍、2 倍设备缩放。每组检查首次绘制及选择变化前后的八个连续帧，断言背景无大面积透明缺失、重复状态的像素哈希一致；文字替身用于隔离系统字体差异。原生窗口启动检查另行验证 macOS 纹理呈现路径。
 
 ## 界面与浏览
 
-主窗口包含菜单、右键菜单、地址栏、状态栏和八个工具栏命令：添加、提取、测试、复制、移动、删除、信息、打开。六列列表显示名称、大小、压缩后、类型、修改时间和属性，支持排序、Cmd/Shift 多选、双击或 Return 打开，以及后退、上级、个人文件夹、桌面和下载目录导航。
+首页不显示文件列表。打开压缩包后，单面板提供菜单、右键菜单、只读路径栏、状态栏及归档操作。六列列表显示名称、大小、压缩后、类型、修改时间和属性，支持排序、多选、双击或 Enter 打开。后退与上级仅在当前压缩包内导航。
 
-`BrowserService` 将本地目录或归档目录转换为 `BrowserSnapshot`。归档路径使用 `archive.zip!/folder/` 表示；缺少显式目录条目的归档也会合成虚拟目录。浏览归档不要求先将整包解压到磁盘。
+`BrowserService` 提供归档快照；主窗口仅调用其归档浏览入口。归档路径使用 `archive.zip!/folder/` 表示；缺少显式目录条目的归档也会合成虚拟目录。浏览归档不要求先将整包解压到磁盘。
 
-添加对话框选择源文件、目标路径和 ZIP/7z 格式；7z 可设置密码及加密文件名。提取支持所选条目、所选目录及整包内容，测试逐条读取文件。操作在后台执行，进度按条目更新，用户可取消。
+添加对话框选择源文件、目标路径、ZIP/7z 格式、压缩级别及密码；ZIP 支持 AES-256 和 ZipCrypto，7z 可加密文件名。提取支持所选条目、所选目录及整包内容，并可选择完整路径、相对于当前目录或不包含目录；测试逐条读取文件。操作在后台执行，进度按条目更新，用户可取消。提取成功提交后通过桌面服务打开输出目录；打开失败单独报告，保留提取成功状态和当前归档位置。
 
-ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加密 ZIP 保持只读。添加保留源顶层名称，支持在当前归档子目录内添加；同名文件默认拒绝，只有勾选替换后才能覆盖。归档内“复制”转为提取所选内容，“移动”尚未提供。打开归档内文件会先提取副本交由系统默认应用处理，副本不会自动回写。废纸篓命令仅针对本地文件，并在确认后通过系统 API 执行。
+ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加密 ZIP 保持只读。添加保留源顶层名称，支持在当前归档子目录内添加；同名文件默认拒绝，只有勾选替换后才能覆盖。归档内“复制”转为提取所选内容。打开归档内文件会先提取副本交由系统默认应用处理，副本不会自动回写。
 
 ## Core 与压缩引擎
 
-`src/EclipseArchive.Core` 定义 `IArchiveEngine`，由 `SharpCompressArchiveEngine` 实现。该项目不依赖 EclipseUI，压缩操作仅使用 SharpCompress 托管库，不调用压缩命令行工具，也不加载原生压缩库。
+`src/EclipseArchive.Core` 定义 `IArchiveEngine`，由 `SharpCompressArchiveEngine` 实现。该项目不依赖 EclipseUI，压缩操作使用 SharpCompress 和 SharpZipLib 托管库，不调用压缩命令行工具，也不加载原生压缩库。
 
 NuGet 版本固定为 `SharpCompress 0.51.0-beta.174`，不使用浮动版本。该包标记的仓库提交为 `b2fade6400cf6b3fe851c1fe9773f19b5b20a586`，对应官方 GitHub 的 `0.51.0-beta2`。NuGet 包版本与 GitHub 标签名称不同，升级时应同时核对包版本、仓库提交和行为测试。
 
@@ -80,7 +84,7 @@ NuGet 版本固定为 `SharpCompress 0.51.0-beta.174`，不使用浮动版本。
 
 操作接受 `CancellationToken`，并在后台执行压缩或解压工作，以避免 CPU 密集过程阻塞 UI。调用者应等待操作完整结束后再使用输出结果；直接使用流式接口时，失败或取消后应丢弃不完整输出。
 
-7z 写入使用 LZMA2 非固实模式，可设置密码，并通过 `encryptFileNames` 加密归档头以隐藏文件名。ZIP 的密码写入请求会抛出 `NotSupportedException`。列目录与提取接口可将密码传入读取选项，以读取对应的加密归档。
+7z 写入使用 LZMA2 非固实模式，级别映射到字典和快字节参数；可设置密码，并通过 `encryptFileNames` 加密归档头。ZIP 支持存储、Deflate、AES-256 和 ZipCrypto 写入，ZipCrypto 创建密码限 ASCII。列目录与提取接口可传入密码读取加密归档。
 
 流式提取只向调用者提供的输出流写入数据；磁盘目录、文件路径和输出提交策略由 `ArchiveFileService` 处理。`ArchiveEntryInfo` 保留归档内路径、大小、加密状态、修改时间和链接信息，供浏览及文件预检使用。
 
@@ -101,13 +105,13 @@ MacDesktopServices → IDesktopServices（定义于共享 UI）
 
 `ArchiveFileService.CreateAsync` 递归枚举源文件与目录并调用引擎创建 ZIP/7z；`ExtractAsync` 预检归档路径后提取所选内容或整包；`TestAsync` 将文件内容读取到空输出流。三者接受进度通知和取消令牌。
 
-创建与提取要求目标不存在，且目标父目录已存在。服务先写同级临时文件或目录，完整成功并再次检查取消状态后，再提交到最终目标；失败或取消时清理临时输出，不覆盖已有内容或合并已有目录。
+提取路径映射后再次检查冲突，展平后同名文件会被拒绝。创建与提取要求目标不存在，且目标父目录已存在。服务先写同级临时文件或目录，完整成功并再次检查取消状态后，再提交到最终目标；失败或取消时清理临时输出，不覆盖已有内容或合并已有目录。
 
 在 macOS 等 Unix 平台，提取暂存目录在写入内容前设为 `0700`，提交后的目标根目录保留该权限；归档编辑工作目录和打开归档内文件的副本目录也使用 `0700`，限制其他用户访问提取出的明文。
 
 文件预检拒绝源路径和目标路径中的符号链接、归档内链接、绝对或父级跳转路径、重复条目，以及大小写/Unicode 规范化后冲突的路径。权限不足等文件系统错误由操作结果报告。
 
-本地复制、移动由窗口文件管理工作流执行，拒绝已有目标、符号链接和将目录放入自身的情况。复制先写临时项目再提交；批量文件管理操作逐项执行。`MacDesktopServices.Trash` 使用系统废纸篓 API，失败抛出文件操作错误，不回退为永久删除。
+主窗口不提供系统目录浏览或本地文件管理。系统文件选择器仅用于选择创建压缩包的源、打开归档及选择输出位置。
 
 `ArchiveEditService` 在原包同目录创建独立工作目录，提取后实施添加、删除或重命名，再重建并校验归档。临时目录在提取明文之前设置为仅当前用户可访问。提交前重新计算原包 SHA-256，外部更改会中止更新；成功时原子替换，失败或取消保留原包。7z 重写保留密码并加密归档头；不能安全保留的权限或元数据会在修改前拒绝。
 

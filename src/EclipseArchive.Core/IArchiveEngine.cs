@@ -6,6 +6,26 @@ public enum ArchiveFormat
     SevenZip,
 }
 
+public enum ArchiveCompressionLevel { Store = 0, Fastest = 1, Fast = 3, Normal = 5, Maximum = 7, Ultra = 9 }
+public enum ZipEncryptionMethod { Aes256, ZipCrypto }
+public enum ExtractionPathMode { FullPaths, CurrentFolder, NoPaths }
+
+public sealed record ArchiveCreateSettings(
+    ArchiveCompressionLevel CompressionLevel = ArchiveCompressionLevel.Normal,
+    ZipEncryptionMethod ZipEncryption = ZipEncryptionMethod.Aes256);
+
+public sealed record ArchiveExtractSettings(
+    ExtractionPathMode PathMode = ExtractionPathMode.FullPaths,
+    string CurrentPrefix = "");
+
+/// <summary>Optional archive creation settings; engines that do not implement this retain the original interface.</summary>
+public interface IConfigurableArchiveEngine : IArchiveEngine
+{
+    Task CreateWithSettingsAsync(Stream destination, IReadOnlyList<ArchiveWriteEntry> entries,
+        ArchiveFormat format, string? password, bool encryptFileNames, ArchiveCreateSettings settings,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>A null content stream represents a directory. The caller owns all streams.</summary>
 public sealed record ArchiveWriteEntry(string EntryPath, Stream? Content, DateTime? LastModified = null);
 

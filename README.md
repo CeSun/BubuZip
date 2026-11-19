@@ -1,19 +1,20 @@
 # EclipseArchive
 
-基于 EclipseUI 的桌面压缩解压应用，首版面向 macOS。
+基于 EclipseUI 的桌面压缩解压应用，支持 Windows、Linux 和 macOS。
 
-当前提供本地文件与归档浏览、ZIP/7z 创建、所选内容或整包提取、读取测试，以及本地复制、移动和废纸篓操作。操作布局参考 NanaZip 的功能组织，外观沿用 EclipseUI Fluent 主题，支持跟随系统、浅色和深色模式。
+启动页提供“新建压缩”和“打开压缩”两个入口。打开压缩包后，可以浏览其中的目录、提取内容、测试归档，以及修改受支持的 ZIP/7z；浏览范围限定在当前压缩包内。界面支持跟随系统、浅色和深色模式。
 
-压缩引擎固定引用 NuGet `SharpCompress 0.51.0-beta.174`，使用托管库完成压缩解压，无需安装命令行压缩工具或原生压缩库。EclipseUI 通过 Git submodule 单独维护。
+压缩引擎固定引用 NuGet `SharpCompress 0.51.0-beta.174` 和 `SharpZipLib 1.4.2`，使用托管库完成压缩解压，无需安装命令行压缩工具或原生压缩库。EclipseUI 通过 Git submodule 单独维护。
 
 ## 当前功能
 
-- 窗口内菜单、右键菜单，以及添加、提取、测试、复制、移动、删除、信息、打开八个工具栏命令。
-- 地址栏、后退/上级导航和六列文件列表：名称、大小、压缩后、类型、修改时间、属性。支持排序、Cmd/Shift 多选、双击或 Return 打开本地目录与归档虚拟目录。
-- ZIP/7z 创建设置；7z 支持密码保护与加密文件名。可提取所选条目、文件夹或整包内容到新目录，并批量读取归档进行校验。
+- “新建压缩”通过系统选择器添加源文件或文件夹并设置输出路径；“打开压缩”先选择压缩包，再显示其内容。
+- 归档浏览器提供添加、提取、测试、复制、删除、信息和返回首页；支持排序、多选、双击或 Enter 打开归档中的项目。选择其他压缩包可使用“打开压缩包…”或 Cmd/Ctrl+O。
+- 归档路径为只读；上一级、Backspace 和历史导航只能访问当前压缩包内的目录，在归档根目录无法继续进入系统文件夹。返回首页会清除当前归档与导航历史。
+- ZIP/7z 可选择压缩级别和密码；ZIP 支持 AES-256 或 ZipCrypto（密码限 ASCII），7z 可加密文件名。提取支持完整路径、相对于当前目录和不包含目录三种模式，并可批量校验归档。
+- 解压成功后自动在系统文件管理器中打开输出目录，应用内继续停留在当前压缩包；解压失败或取消时不会打开目录。
 - ZIP/7z 内部添加文件、删除条目和 F2 重命名；支持子目录添加、目录合并和明确选择后替换同名文件。
-- 后台操作、按条目更新的进度与取消；原生文件/文件夹选择、保存面板，以及信息和确认对话框。
-- Finder 显示当前位置，本地文件复制、移动和移到系统废纸篓。本地文件的“删除”执行废纸篓操作，归档内的“删除”需单独确认。
+- 后台操作、按条目更新的进度与取消；文件/文件夹选择、保存面板，以及信息和确认对话框。
 
 ZIP/7z 修改会先在独立工作目录重建、校验，确认原包未被其他程序更改后，再替换原包；失败或取消保留原包。加密 ZIP 和其他格式保持只读，无法保留的权限或元数据会拒绝编辑。7z 修改保留所提供的密码，并加密文件名。
 
@@ -23,27 +24,28 @@ ZIP 修改保留条目的原始属性与创建平台标识，包含 Unix 执行�
 
 压缩和提取目标必须是新路径，不覆盖已有文件或合并已有目录。`ArchiveFileService` 先写临时输出，成功后再提交到目标；失败或取消时清理临时输出。文件工作流拒绝符号链接、不安全路径以及冲突的归档路径。
 
-macOS 上的解压暂存目录、归档编辑工作目录及打开文件的副本目录仅允许当前用户访问（`0700`）。解压完成后的目标根目录保留这一权限。
+macOS 和 Linux 上的解压暂存目录、归档编辑工作目录及打开文件的副本目录仅允许当前用户访问（`0700`）。解压完成后的目标根目录保留这一权限。
 
 macOS 的 `/tmp`、`/var`、`/etc` 系统入口在确认真实指向 `/private` 对应目录后会被规范化，普通用户符号链接仍按原策略拒绝。
 
 关闭窗口会取消并等待后台任务清理完成；正式输出已经提交后，以成功状态为准。整包提取和校验使用批量读取，solid 7z/RAR 保持顺序解码，避免为每个文件重复打开归档。
 
-窗口当前使用 Vello Sparse 在 CPU 上绘制完整画面，再由 Metal 上传纹理并呈现，避开本机 VelloSharp GPU 栅格路径中复现的大面积黑块。界面变化时重绘整帧，空闲时跳过绘制；`--shot` 预览使用同一软件栅格后端。当前软件后端的阴影保留偏移轮廓，不提供模糊效果。
+Windows 和 macOS 使用 Vello Sparse 在 CPU 上绘制画面，再由 Direct3D 12 或 Metal 呈现；Linux 使用 Vello 的 Vulkan 渲染后端，要求可用的 Vulkan 驱动（包括软件驱动）。界面变化时重绘，空闲时跳过绘制。离屏预览在 Windows/macOS 使用 Sparse，在 Linux 使用 Vello CPU 后端。
 
 ## 开发环境
 
-- macOS 13 或更新版本。
-- .NET 10 SDK。
-- 开发运行所需的 SDL3、HarfBuzz：
+- .NET 10 SDK；64 位 Windows、Linux 或 macOS 13 及更新版本。目前原生渲染依赖不提供 32 位构建。
+- Windows：Direct3D 12、Windows PowerShell 5.1（用于文件选择对话框）。
+- Linux：SDL3、HarfBuzz、Vulkan 驱动、`zenity` 和 `xdg-open`（xdg-utils），以及可用的 X11 或 Wayland 桌面。请通过发行版的软件仓库安装这些组件；不同发行版的 SDL3 包名和版本可能不同。
+- macOS 开发运行所需的 SDL3、HarfBuzz：
 
   ```bash
   brew install sdl3 harfbuzz
   ```
 
-- 生成 `.app` 需要 Xcode Command Line Tools。
+- macOS 生成 `.app` 需要 Xcode Command Line Tools。
 
-Homebrew 依赖用于开发运行和构建时收集原生库。打包流程会将 SDL3、HarfBuzz 及所需原生依赖收入 `.app`，并包含自包含 .NET 运行时；分发后的应用不要求用户安装 Homebrew 或 .NET SDK。
+macOS 的 Homebrew 依赖用于开发运行和构建时收集原生库。`.app` 打包流程会将 SDL3、HarfBuzz 及所需原生依赖收入应用，并包含自包含 .NET 运行时；分发后的 macOS 应用不要求安装 Homebrew 或 .NET SDK。Windows/Linux 的文件选择器一次选择一组文件或一个文件夹；可在创建或添加对话框中多次选择，合并文件和文件夹，也可清空后重新选择。
 
 ## 获取项目
 
@@ -71,7 +73,7 @@ dotnet build EclipseArchive.slnx
 dotnet run --project src/EclipseArchive.Desktop
 ```
 
-指定初始浏览目录：
+指定新建压缩包时的初始建议目录：
 
 ```bash
 dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads"
@@ -93,9 +95,19 @@ dotnet run --project src/EclipseArchive.Desktop -- --frames 3
 
 ```bash
 dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --shot out/preview.png
+dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --shot out/preview-dark.png --dark
 ```
 
-有限帧启动与离屏预览分别用于检查窗口生命周期和布局；Core 与 UI 行为测试通过解决方案测试命令运行。窗口像素回归覆盖浅色、深色及 1 倍、2 倍设备缩放，检查连续帧和选择变化后的画面完整性与像素稳定性。
+离屏预览不打开桌面窗口；默认浅色，`--dark` 输出深色预览。有限帧启动与离屏预览分别用于检查窗口生命周期和布局；Core 与 UI 行为测试通过解决方案测试命令运行。窗口像素回归覆盖浅色、深色及 1 倍、2 倍设备缩放，检查连续帧和选择变化后的画面完整性与像素稳定性。
+
+可使用 .NET 发布 Windows 和 Linux 的自包含目录（在项目根目录运行，目标运行时也可选择对应的 `win-arm64` 或 `linux-arm64`）：
+
+```bash
+dotnet publish src/EclipseArchive.Desktop -c Release -r win-x64 --self-contained true -o out/windows-x64
+dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contained true -o out/linux-x64
+```
+
+发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/EclipseArchive.Desktop`。Windows ARM64、Linux ARM64 的原生依赖需要在相应设备上单独验证。
 
 ## Core 流式接口
 
@@ -111,7 +123,7 @@ dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --sh
 
 `ArchiveWriteEntry` 包含归档内路径、内容流和可选修改时间；`Content = null` 表示目录。所有调用者提供的流均保持打开。创建归档需要空输出流；列目录与提取需要从归档起点读取，调用者在复用流时应自行设置 `Position = 0`。操作在后台执行并接受 `CancellationToken`；失败或取消后应丢弃不完整输出。
 
-7z 使用 LZMA2 非固实写入，支持密码和 `encryptFileNames` 文件名隐藏（加密归档头）。ZIP 当前支持普通写入；请求创建密码 ZIP 时抛出 `NotSupportedException`。输入归档的密码通过列目录与提取接口传入。
+7z 使用 LZMA2 非固实写入，压缩级别映射到字典和快字节参数，支持密码和 `encryptFileNames` 文件名隐藏。ZIP 支持存储和 Deflate 压缩，以及 AES-256 或 ZipCrypto 加密；为保持读取兼容，ZipCrypto 创建时的密码仅支持 ASCII。输入归档的密码通过列目录与提取接口传入。展平路径后若出现同名冲突，提取会拒绝执行。
 
 流式引擎只读写调用者提供的流；同项目中的 `ArchiveFileService` 负责实际磁盘文件枚举、创建、提取、读取测试、路径预检、临时输出和提交，`ArchiveEditService` 负责原包修改。UI 调用文件服务并显示操作状态。版本及接口边界见 [架构说明](docs/architecture.md)。
 
@@ -146,7 +158,7 @@ dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --sh
 |---|---|
 | `src/EclipseArchive.Core` | SharpCompress 流式引擎、磁盘文件工作流及进度模型，无 UI 依赖 |
 | `src/EclipseArchive` | 主窗口、文件列表、浏览服务和桌面服务接口 |
-| `src/EclipseArchive.Desktop` | macOS 入口、原生对话框、系统文件操作与离屏预览 |
+| `src/EclipseArchive.Desktop` | 跨平台桌面入口、系统对话框、文件操作与离屏预览 |
 | `tests/EclipseArchive.Core.Tests` | 流式引擎与文件服务测试 |
 | `tests/EclipseArchive.Ui.Tests` | 文件浏览和主窗口交互测试 |
 | `external/EclipseUI` | 固定提交的 EclipseUI Git 子模块 |

@@ -2,12 +2,15 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>EclipseArchive.Desktop</RootNamespace>
-    <Description>EclipseArchive macOS desktop application.</Description>
+    <Description>EclipseArchive cross-platform desktop application.</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="EclipseArchive.Ui.Tests" />
     <ProjectReference Include="../EclipseArchive/EclipseArchive.csproj" />
     <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.MacOS/EclipseUI.Platform.MacOS.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.Windows/EclipseUI.Platform.Windows.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.Linux/EclipseUI.Platform.Linux.csproj" />
     <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering.Vello/EclipseUI.Rendering.Vello.csproj" />
     <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Text.Shaping/EclipseUI.Text.Shaping.csproj" />
   </ItemGroup>

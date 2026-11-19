@@ -224,7 +224,13 @@ public sealed class ArchiveEditServiceTests : IDisposable
         var before = await File.ReadAllBytesAsync(archive);
         var source = await WriteFile("source.txt", "source");
         var link = Path.Combine(_root, "alias.txt");
-        File.CreateSymbolicLink(link, source);
+        try { File.CreateSymbolicLink(link, source); }
+        catch (IOException error) when (OperatingSystem.IsWindows() && error.HResult == unchecked((int)0x80070522))
+        {
+            // Windows can require a privilege that is not granted to ordinary test users.
+            AssertNoWorkingDirectories();
+            return;
+        }
         await Assert.ThrowsAsync<IOException>(() => Editor.AddAsync(archive, [link]));
         Assert.Equal(before, await File.ReadAllBytesAsync(archive));
         AssertNoWorkingDirectories();
@@ -359,7 +365,7 @@ public sealed class ArchiveEditServiceTests : IDisposable
         string archiveComment = "", string entryComment = "")
     {
         var path = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".zip");
-        await using var output = File.Create(path);
+        await using var output = new FileStream(path, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
         using (var archive = new System.IO.Compression.ZipArchive(output, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
         {
             archive.Comment = archiveComment;
@@ -371,6 +377,24 @@ public sealed class ArchiveEditServiceTests : IDisposable
             await using var content = entry.Open();
             await content.WriteAsync(Encoding.UTF8.GetBytes("metadata fixture"));
         }
+        // ZipArchive records the host OS as creator; force Unix so this fixture tests
+        // preservation of Unix creator metadata on every host, including Windows.
+        await output.FlushAsync();
+        output.Position = 0;
+        var bytes = new byte[checked((int)output.Length)];
+        await output.ReadExactlyAsync(bytes);
+        var eocd = bytes.Length - 22 - Encoding.UTF8.GetByteCount(archiveComment);
+        var position = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(eocd + 16)));
+        for (var index = 0; index < 2; index++)
+        {
+            Assert.Equal(0x02014B50u, BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(position)));
+            bytes[position + 5] = 3;
+            position += 46 + BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(position + 28)) +
+                BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(position + 30)) +
+                BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(position + 32));
+        }
+        output.Position = 0;
+        await output.WriteAsync(bytes);
         return path;
     }
 

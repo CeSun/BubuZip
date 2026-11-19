@@ -12,6 +12,71 @@ namespace EclipseArchive.Ui.Tests;
 public sealed class MainWindowRenderingTests
 {
     [Theory]
+    [InlineData(false, 1000, 640)]
+    [InlineData(true, 1000, 640)]
+    [InlineData(false, 480, 320)]
+    [InlineData(true, 480, 320)]
+    public void ModalDialogCoversWindowIsOpaqueAndKeepsActionsAccessible(bool dark, int width, int height)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "EclipseArchive.Modal-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var engine = new SharpCompressArchiveEngine();
+        using var window = new MainWindow
+        {
+            Engine = engine, FileService = new ArchiveFileService(engine),
+            Desktop = new FakeDesktopServices(), InitialPath = directory,
+        };
+        try
+        {
+            window.EnsureInitialized();
+            var root = window.Content!;
+            var size = new Size(width, height);
+            using var host = new HeadlessRoot(window) { AvailableSize = size };
+            var painter = new ElementPainter(dark ? FluentTheme.Dark : FluentTheme.Light, new ShapeTextPainter());
+            using IRenderBackend backend = OperatingSystem.IsLinux()
+                ? new VelloCpuBackend(new VelloBackendOptions { ValidateDisplayList = true })
+                : new VelloSparseBackend(validateDisplayList: true);
+            RenderTarget Render()
+            {
+                painter.Prepare(root); host.UpdateLayout();
+                root.Measure(size); root.Arrange(new Rect(Point.Zero, size));
+                var target = new RenderTarget(width, height);
+                backend.Render(painter.Build(root, size, 1), target);
+                return target;
+            }
+            var before = Render();
+            root.Descendants().OfType<Button>().Single(button => button.Label == "新建压缩").Click();
+            var after = Render();
+            var frame = Assert.Single(root.Descendants().OfType<ArchiveDialogBorder>());
+            var overlay = Assert.IsType<ArchiveSurface>(frame.Parent);
+            Assert.True(overlay.IsVisible);
+            Assert.Equal(new Rect(0, 0, width, height), overlay.FinalRect);
+            Assert.InRange(Math.Abs(frame.FinalRect.X + frame.FinalRect.Width / 2 - width / 2d), 0, .01);
+            Assert.InRange(Math.Abs(frame.FinalRect.Y + frame.FinalRect.Height / 2 - height / 2d), 0, .01);
+            Assert.True(frame.FinalRect.Width <= width - 32);
+            Assert.True(frame.FinalRect.Height <= height - 32);
+            Assert.NotEqual(before.GetPixel(8, height - 8), after.GetPixel(8, height - 8));
+            Assert.Equal(dark ? new Color(44, 44, 44) : new Color(250, 250, 250),
+                after.GetPixel((int)frame.FinalRect.X + 12, (int)frame.FinalRect.Y + 12));
+            var start = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "开始");
+            var cancel = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "取消");
+            Assert.Equal(start.FinalRect.Y, cancel.FinalRect.Y);
+            Assert.True(start.FinalRect.Right < cancel.FinalRect.X);
+            Assert.True(start.IsEffectiveEnabled && cancel.IsEffectiveEnabled);
+            Assert.Contains(host.Input.HitTest(new Point(8, height - 8))!, overlay.Descendants().Prepend(overlay));
+            frame.Descendants().OfType<ComboBox>().First().SelectedIndex = 1;
+            Render();
+            Assert.True(frame.FinalRect.Height <= height - 32);
+            if (height == 320)
+                Assert.True(frame.Descendants().OfType<ScrollViewer>().First().ScrollableHeight > 0);
+            Assert.True(start.IsEffectiveEnabled && cancel.IsEffectiveEnabled);
+            cancel.Click(); Render();
+            Assert.False(overlay.IsVisible);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Theory]
     [InlineData(false, 1)]
     [InlineData(false, 2)]
     [InlineData(true, 1)]
@@ -45,7 +110,9 @@ public sealed class MainWindowRenderingTests
             var theme = dark ? FluentTheme.Dark : FluentTheme.Light;
             host = new HeadlessRoot(window) { AvailableSize = logicalSize };
             var painter = new ElementPainter(theme, new ShapeTextPainter());
-            using var backend = new VelloSparseBackend(validateDisplayList: true);
+            using IRenderBackend backend = OperatingSystem.IsLinux()
+                ? new VelloCpuBackend(new VelloBackendOptions { ValidateDisplayList = true })
+                : new VelloSparseBackend(validateDisplayList: true);
 
             RenderTarget RenderFrame()
             {
@@ -59,17 +126,16 @@ public sealed class MainWindowRenderingTests
                 for (var pixel = 3; pixel < target.Pixels.Length; pixel += 4)
                     Assert.True(target.Pixels[pixel] >= 250,
                         $"Missing window pixel (alpha < 250) at {(pixel / 4) % width},{(pixel / 4) / width} in the {width}x{height} {(dark ? "dark" : "light")} frame.");
-                Assert.Equal(theme.Surface, target.GetPixel(width - 4, height - 4));
-                Assert.Equal(theme.Surface, target.GetPixel(width / 2, height / 2));
                 return target;
             }
 
             var first = RenderFrame();
+            Assert.Equal(dark ? new Color(28, 34, 51) : new Color(240, 244, 249), first.GetPixel(width - 4, height - 4));
+            Assert.Equal(dark ? new Color(28, 34, 51) : new Color(240, 244, 249), first.GetPixel(width * 3 / 4, height / 2));
             for (var frame = 0; frame < 3; frame++)
                 Assert.Equal(first.ContentHash(), RenderFrame().ContentHash());
 
-            var files = Assert.Single(root.Descendants().OfType<ListBox>());
-            files.SelectedItem = Assert.Single(window.VisibleItems, item => item.Name == "README.md");
+            root.Descendants().OfType<Button>().Single(button => button.Label == "新建压缩").Click();
             var changed = RenderFrame();
             Assert.NotEqual(first.ContentHash(), changed.ContentHash());
             for (var frame = 0; frame < 3; frame++)

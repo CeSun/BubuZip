@@ -15,319 +15,391 @@ namespace EclipseArchive.Ui.Tests;
 
 public sealed class MainWindowTests
 {
-    private static readonly string[] ToolbarLabels =
-        ["＋ 添加", "↓ 提取", "测试", "复制", "移动", "删除", "信息", "打开…"];
-
     [Fact]
-    public void MainWindowShowsTheArchiveToolbarMenusAndFileColumns()
+    public void ArchivePickerDoesNotBlockUiAndOpensTheSelectedArchive()
     {
         using var fixture = new WindowFixture();
-        fixture.WriteFile("说明.txt", "本地文件");
+        fixture.Desktop.ArchiveChoice = fixture.CreateZip(("file.txt", "content"));
+        fixture.Desktop.DialogGate = new();
         fixture.OpenWindow();
-
-        var toolbar = Assert.Single(fixture.Elements<WrapPanel>(), panel =>
-            panel.Children.OfType<Button>().Any(button => button.Label == "＋ 添加"));
-        Assert.Equal(ToolbarLabels, toolbar.Children.OfType<Button>().Select(button => button.Label));
-
-        var menu = Assert.Single(fixture.Elements<Menu>(), candidate =>
-            candidate.Children.OfType<MenuItem>().Any(item => item.Label == "文件"));
-        Assert.Equal(new[] { "文件", "编辑", "查看", "收藏夹", "帮助" },
-            menu.Children.OfType<MenuItem>().Select(item => item.Label));
-        var fileMenu = Assert.Single(menu.Children.OfType<MenuItem>(), item => item.Label == "文件");
-        var fileCommands = Assert.IsType<ContextMenu>(fileMenu.Submenu);
-        Assert.Contains(fileCommands.Items.OfType<MenuItem>(), item => item.Label == "添加到压缩包…");
-        Assert.Contains(fileCommands.Items.OfType<MenuItem>(), item => item.Label == "测试压缩包");
-
-        var header = Assert.Single(fixture.Elements<Grid>(), grid =>
-            grid.Children.OfType<Button>().Any(button => button.Label == "名称"));
-        Assert.Equal(new[] { "名称", "大小", "压缩后", "类型", "修改时间", "属性" },
-            header.Children.OfType<Button>().Select(button => button.Label));
-        Assert.Equal(SelectionMode.Extended, fixture.Files.SelectionMode);
-        Assert.Equal("说明.txt", Assert.Single(fixture.Files.ItemValues.OfType<BrowserItem>()).Name);
-        Assert.Equal(fixture.DirectoryPath, fixture.Address.Text);
+        fixture.Click("打开压缩");
+        Assert.True(fixture.Window.TaskIsRunning);
+        Assert.False(fixture.FindButton("打开压缩").IsEffectiveEnabled);
+        fixture.Desktop.DialogGate.SetResult(true);
+        fixture.WaitForIdle();
+        Assert.Equal("file.txt", Assert.Single(fixture.Window.VisibleItems).Name);
     }
 
     [Fact]
-    public void CommandSelectAllUpdatesTheSelectionSummaryAndFileCommands()
+    public void SourceAndSavePickersDoNotBlockUiAndApplyTheirResults()
     {
         using var fixture = new WindowFixture();
-        fixture.WriteFile("第一份.txt", "一");
-        fixture.WriteFile("第二份.txt", "二");
-        fixture.OpenWindow();
-
-        Assert.Empty(fixture.Files.SelectedItems);
-        Assert.False(fixture.FindButton("复制").IsEffectiveEnabled);
-        Assert.False(fixture.FindButton("移动").IsEffectiveEnabled);
-        Assert.False(fixture.FindButton("删除").IsEffectiveEnabled);
-        Assert.False(fixture.FindButton("信息").IsEffectiveEnabled);
-
-        fixture.Files.RaiseEvent(new KeyEventArgs(Element.KeyDownEvent, Key.A, KeyModifiers.Meta));
-        fixture.Host.UpdateLayout();
-
-        Assert.Equal(2, fixture.Files.SelectedItems.Count);
-        Assert.Equal(new[] { "第一份.txt", "第二份.txt" }.Order(StringComparer.Ordinal),
-            fixture.Files.SelectedItems.OfType<BrowserItem>().Select(item => item.Name).Order(StringComparer.Ordinal));
-        Assert.Contains(fixture.Texts(), text => text.StartsWith("已选择 2 项", StringComparison.Ordinal));
-        Assert.True(fixture.FindButton("复制").IsEffectiveEnabled);
-        Assert.True(fixture.FindButton("移动").IsEffectiveEnabled);
-        Assert.True(fixture.FindButton("删除").IsEffectiveEnabled);
-        Assert.True(fixture.FindButton("信息").IsEffectiveEnabled);
-        Assert.False(fixture.FindButton("↓ 提取").IsEffectiveEnabled);
-
-        fixture.Files.Selection.Clear();
-        fixture.Host.UpdateLayout();
-
-        Assert.Empty(fixture.Files.SelectedItems);
-        Assert.Contains("本地文件", fixture.Texts());
-        Assert.False(fixture.FindButton("复制").IsEffectiveEnabled);
-        Assert.False(fixture.FindButton("信息").IsEffectiveEnabled);
-    }
-
-    [Fact]
-    public void AddCommandLetsTheUserChooseSourcesFormatDestinationAndPasswordThenCancel()
-    {
-        using var fixture = new WindowFixture();
-        var first = fixture.WriteFile("第一份.txt", "一");
-        var second = fixture.WriteFile("第二份.txt", "二");
-        fixture.Desktop.Inputs = [first, second];
-        var outputPath = Path.Combine(fixture.DirectoryPath, "自选压缩包.7z");
-        fixture.Desktop.SavePath = outputPath;
-        fixture.OpenWindow();
-
-        fixture.Click("＋ 添加");
-
-        Assert.Contains("添加到压缩包", fixture.Texts());
-        Assert.Contains("请选择要添加的文件或文件夹", fixture.Texts());
-        Assert.Contains("压缩包路径", fixture.Texts());
-        Assert.False(fixture.FindButton("＋ 添加").IsEffectiveEnabled);
-        var format = Assert.Single(fixture.Elements<ComboBox>());
-        Assert.Equal(new[] { "ZIP", "7z" }, format.EffectiveItems.Cast<string>());
-        Assert.Equal(0, format.SelectedIndex);
-        Assert.Empty(fixture.Elements<PasswordBox>());
-        Assert.Contains(fixture.Elements<TextBox>(), box =>
-            box.Text == Path.Combine(fixture.DirectoryPath, "Archive.zip"));
-
+        fixture.Desktop.Inputs = [fixture.WriteFile("source.txt", "content")];
+        fixture.OpenWindow(); fixture.Click("新建压缩");
+        fixture.Desktop.DialogGate = new();
         fixture.Click("选择文件…");
-
-        Assert.Contains("已选择 2 个文件或文件夹", fixture.Texts());
-        format.SelectedIndex = 1;
-        fixture.Host.UpdateLayout();
-
-        Assert.Contains("密码（无密码可留空）", fixture.Texts());
-        var password = Assert.Single(fixture.Elements<PasswordBox>());
-        password.Text = "本次使用的密码";
-        var encryptNames = Assert.Single(fixture.Elements<CheckBox>(), box => box.Label == "加密文件名");
-        encryptNames.Toggle();
-        fixture.Host.UpdateLayout();
-
+        Assert.True(fixture.Window.TaskIsRunning);
+        Assert.False(fixture.FindButton("开始").IsEffectiveEnabled);
+        fixture.Desktop.DialogGate.SetResult(true); fixture.WaitForIdle();
+        Assert.Contains("source.txt", fixture.Texts());
+        fixture.Desktop.DialogGate = new();
+        fixture.Desktop.SavePath = Path.Combine(fixture.DirectoryPath, "chosen.zip");
         fixture.Click("浏览…");
-
-        Assert.EndsWith(".7z", Assert.Single(fixture.Desktop.SaveSuggestions));
-        Assert.Contains(fixture.Elements<TextBox>(), box => box.Text == outputPath);
-        fixture.Click("取消");
-
-        Assert.DoesNotContain("添加到压缩包", fixture.Texts());
-        Assert.Empty(fixture.Elements<ComboBox>());
-        Assert.Empty(fixture.Elements<PasswordBox>());
-        Assert.True(fixture.FindButton("＋ 添加").IsEffectiveEnabled);
-        Assert.False(fixture.Window.TaskIsRunning);
-        Assert.False(File.Exists(outputPath));
-        Assert.Equal(fixture.DirectoryPath, fixture.Window.CurrentLocation!.DirectoryPath);
-
-        fixture.Click("＋ 添加");
-        var reopenedFormat = Assert.Single(fixture.Elements<ComboBox>());
-        Assert.Equal(0, reopenedFormat.SelectedIndex);
-        reopenedFormat.SelectedIndex = 1;
-        fixture.Host.UpdateLayout();
-        Assert.Equal("", Assert.Single(fixture.Elements<PasswordBox>()).Text);
-        Assert.False(Assert.Single(fixture.Elements<CheckBox>(), box => box.Label == "加密文件名").Checked);
-        fixture.Click("取消");
+        Assert.True(fixture.Window.TaskIsRunning);
+        fixture.Desktop.DialogGate.SetResult(true); fixture.WaitForIdle();
+        fixture.Click("开始"); fixture.WaitForIdle();
+        Assert.True(File.Exists(fixture.Desktop.SavePath));
     }
 
     [Fact]
-    public void PublicNavigationEntersALocalDirectoryAndReturnsToItsParent()
+    public void CancelledPickerReturnsToUsableWindow()
     {
         using var fixture = new WindowFixture();
-        var childPath = fixture.CreateDirectory("资料");
-        fixture.WriteFile("资料/你好，世界.txt", "中文内容");
-        fixture.WriteFile("根文件.txt", "根目录");
-        fixture.OpenWindow();
-
-        fixture.Run(fixture.Window.NavigateToAsync(childPath));
-
-        Assert.Equal(childPath, fixture.Window.CurrentLocation!.DirectoryPath);
-        Assert.Null(fixture.Window.CurrentLocation.ArchivePath);
-        Assert.Equal("你好，世界.txt", Assert.Single(fixture.Window.VisibleItems).Name);
-        Assert.Equal(childPath, fixture.Address.Text);
-        Assert.False(fixture.Window.TaskIsRunning);
-
-        fixture.Run(fixture.Window.NavigateUpAsync());
-
-        Assert.Equal(fixture.DirectoryPath, fixture.Window.CurrentLocation!.DirectoryPath);
-        Assert.Equal(new[] { "资料", "根文件.txt" }.Order(StringComparer.Ordinal),
-            fixture.Window.VisibleItems.Select(item => item.Name).Order(StringComparer.Ordinal));
-        Assert.Equal(fixture.DirectoryPath, fixture.Address.Text);
+        fixture.Desktop.DialogGate = new();
+        fixture.OpenWindow(); fixture.Click("打开压缩");
+        fixture.Desktop.DialogGate.SetResult(true); fixture.WaitForIdle();
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.True(fixture.FindButton("打开压缩").IsEffectiveEnabled);
     }
 
     [Fact]
-    public void PublicNavigationMovesThroughRealZipFoldersAndBackToTheFilesystem()
+    public void StartupShowsOnlyCreateAndOpenWithoutBrowsingLocalFiles()
     {
         using var fixture = new WindowFixture();
-        var archivePath = fixture.CreateZip(
-            ("docs/指南.txt", "使用说明"),
-            ("docs/deeper/细节.txt", "深层内容"),
-            ("empty/", null),
-            ("root.txt", "根目录内容"));
+        fixture.WriteFile("本地文件.txt", "not in an archive");
         fixture.OpenWindow();
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.Empty(fixture.Window.VisibleItems);
+        Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).IsEffectivelyVisible);
+        Assert.Equal(new[] { "新建压缩", "打开压缩" }, fixture.Elements<Button>()
+            .Where(button => button is not MenuItem && button.IsEffectivelyVisible)
+            .Select(button => button.Label));
+        fixture.Click("打开压缩");
+        fixture.WaitForIdle();
+        Assert.Equal(1, fixture.Desktop.ArchiveChoices);
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).IsEffectivelyVisible);
+    }
 
-        fixture.Run(fixture.Window.NavigateToAsync(archivePath));
-
-        Assert.Equal(archivePath, fixture.Window.CurrentLocation!.ArchivePath);
+    [Fact]
+    public void OpenUsesTheFilePickerAndNavigationCannotLeaveTheArchiveRoot()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("docs/deeper/readme.txt", "content"), ("root.txt", "root"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow();
+        fixture.Click("打开压缩");
+        fixture.WaitForIdle();
+        var pane = Assert.Single(fixture.Elements<ArchivePane>());
+        Assert.True(pane.IsEffectivelyVisible);
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
         Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
-        Assert.Equal(archivePath + "!/", fixture.Address.Text);
-        Assert.Equal(new[] { "docs", "empty", "root.txt" }.Order(StringComparer.Ordinal),
-            fixture.Window.VisibleItems.Select(item => item.Name).Order(StringComparer.Ordinal));
-        Assert.True(fixture.FindButton("↓ 提取").IsEffectiveEnabled);
-        Assert.True(fixture.FindButton("测试").IsEffectiveEnabled);
-
-        var docs = Assert.Single(fixture.Window.VisibleItems, item => item.Name == "docs");
-        fixture.Run(fixture.Window.OpenItemAsync(docs));
-
-        Assert.Equal("docs/", fixture.Window.CurrentLocation!.ArchivePrefix);
-        Assert.Equal(new[] { "deeper", "指南.txt" }.Order(StringComparer.Ordinal),
-            fixture.Window.VisibleItems.Select(item => item.Name).Order(StringComparer.Ordinal));
-        fixture.Run(fixture.Window.NavigateToAsync(archivePath, "docs/deeper/"));
-
+        Assert.True(fixture.Address.IsReadOnly);
+        Assert.False(pane.UpButton.IsEffectiveEnabled);
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems, item => item.Name == "docs")));
+        Assert.True(pane.UpButton.IsEffectiveEnabled);
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems, item => item.Name == "deeper")));
         Assert.Equal("docs/deeper/", fixture.Window.CurrentLocation!.ArchivePrefix);
-        Assert.Equal("细节.txt", Assert.Single(fixture.Window.VisibleItems).Name);
-        Assert.Equal(archivePath + "!/docs/deeper/", fixture.Address.Text);
-        fixture.Files.SelectedIndex = 0;
-        fixture.Host.UpdateLayout();
-        Assert.True(fixture.FindButton("复制").IsEffectiveEnabled);
-        Assert.False(fixture.FindButton("移动").IsEffectiveEnabled);
-        Assert.True(fixture.FindButton("删除").IsEffectiveEnabled);
-
         fixture.Run(fixture.Window.NavigateUpAsync());
         Assert.Equal("docs/", fixture.Window.CurrentLocation!.ArchivePrefix);
         fixture.Run(fixture.Window.NavigateUpAsync());
         Assert.Equal("", fixture.Window.CurrentLocation!.ArchivePrefix);
+        Assert.False(pane.UpButton.IsEffectiveEnabled);
         fixture.Run(fixture.Window.NavigateUpAsync());
-
-        Assert.Null(fixture.Window.CurrentLocation!.ArchivePath);
-        Assert.Equal(fixture.DirectoryPath, fixture.Window.CurrentLocation.DirectoryPath);
-        Assert.Equal(fixture.DirectoryPath, fixture.Address.Text);
-        Assert.Equal("导航测试.zip", Assert.Single(fixture.Window.VisibleItems).Name);
-    }
-
-    [Fact]
-    public void FirstTestCommandReadsASelectedZipWithoutRequiringAnOutputDestination()
-    {
-        using var fixture = new WindowFixture();
-        fixture.CreateZip(("资料/你好.txt", "用于完整性测试的中文内容 📦"), ("空目录/", null));
-        fixture.OpenWindow();
-        fixture.SelectItem("导航测试.zip");
-
-        fixture.Click("测试");
-
-        Assert.Contains("测试压缩包", fixture.Texts());
-        Assert.DoesNotContain("压缩包路径", fixture.Texts());
-        Assert.DoesNotContain("输出文件夹（新建）", fixture.Texts());
-
-        fixture.Click("开始");
-        fixture.WaitForIdle();
-
-        Assert.Equal("测试完成，所有文件均可读取。", fixture.Window.StatusMessage);
-        Assert.Contains("测试完成，所有文件均可读取。", fixture.Texts());
-        Assert.False(fixture.Window.TaskIsRunning);
-        Assert.Empty(fixture.Elements<ProgressBar>());
-        Assert.DoesNotContain("测试压缩包", fixture.Texts());
-        Assert.Equal(fixture.DirectoryPath, fixture.Window.CurrentLocation!.DirectoryPath);
-        Assert.Null(fixture.Window.CurrentLocation.ArchivePath);
-    }
-
-    [Fact]
-    public void StartCommandsCreateARealZipThenExtractItsContentsToDisk()
-    {
-        using var fixture = new WindowFixture();
-        const string content = "压缩后应当完整还原的中文、emoji 📦。\n第二行内容。";
-        var sourcePath = fixture.WriteFile("中文原文.txt", content);
-        var archivePath = Path.Combine(fixture.DirectoryPath, "往返归档.zip");
-        fixture.Desktop.SavePath = archivePath;
-        fixture.OpenWindow();
-        fixture.SelectItem("中文原文.txt");
-
-        fixture.Click("＋ 添加");
-
-        Assert.Contains("中文原文.txt", fixture.Texts());
-        Assert.Equal(0, Assert.Single(fixture.Elements<ComboBox>()).SelectedIndex);
-        fixture.Click("浏览…");
-        fixture.Click("开始");
-        fixture.WaitForIdle();
-
-        Assert.Equal("压缩包创建完成。", fixture.Window.StatusMessage);
-        Assert.True(File.Exists(archivePath));
-        Assert.Contains(fixture.Window.VisibleItems, item => item.Path == archivePath && item.IsArchive);
-        var archive = Assert.Single(fixture.Window.VisibleItems, item => item.Path == archivePath);
-        fixture.Run(fixture.Window.OpenItemAsync(archive));
-
-        Assert.Equal(archivePath, fixture.Window.CurrentLocation!.ArchivePath);
-        Assert.Equal("中文原文.txt", Assert.Single(fixture.Window.VisibleItems).Name);
-        var extractedDirectory = Path.Combine(fixture.DirectoryPath, "往返归档");
-        fixture.Click("↓ 提取");
-
-        Assert.Contains("提取文件", fixture.Texts());
-        Assert.Contains(fixture.Elements<TextBox>(), box => box.Text == extractedDirectory);
-        fixture.Click("开始");
-        fixture.WaitForIdle();
-
-        Assert.Equal("提取完成。", fixture.Window.StatusMessage);
-        Assert.Equal(content, File.ReadAllText(Path.Combine(extractedDirectory, "中文原文.txt")));
-        Assert.Equal(content, File.ReadAllText(sourcePath));
-        Assert.Equal(extractedDirectory, fixture.Window.CurrentLocation!.DirectoryPath);
-        Assert.Null(fixture.Window.CurrentLocation.ArchivePath);
-        Assert.Equal("中文原文.txt", Assert.Single(fixture.Window.VisibleItems).Name);
-        Assert.Empty(fixture.Elements<ProgressBar>());
-    }
-
-    [Fact]
-    public void SevenZipWorkflowEncryptsFilenamesAndOpensAfterEnteringThePassword()
-    {
-        using var fixture = new WindowFixture();
-        fixture.WriteFile("机密.txt", "需要密码才能查看的内容");
-        const string password = "Archive-密码-2026!";
-        var archivePath = Path.Combine(fixture.DirectoryPath, "机密.7z");
-        fixture.OpenWindow();
-        fixture.SelectItem("机密.txt");
-
-        fixture.Click("＋ 添加");
-        Assert.Single(fixture.Elements<ComboBox>()).SelectedIndex = 1;
+        fixture.Files.RaiseEvent(new KeyEventArgs(Element.KeyDownEvent, Key.Backspace));
         fixture.Host.UpdateLayout();
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
+        Assert.Throws<InvalidOperationException>(() => fixture.Run(fixture.Window.NavigateToAsync(fixture.DirectoryPath)));
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        fixture.Click("返回首页");
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.False(pane.IsEffectivelyVisible);
+        fixture.Click("新建压缩");
+        Assert.Contains("添加到压缩包", fixture.Texts());
+        Assert.DoesNotContain("添加到当前压缩包", fixture.Texts());
+        fixture.Click("取消");
+    }
 
-        Assert.Contains(fixture.Elements<TextBox>(), box => box.Text == archivePath);
-        Assert.Single(fixture.Elements<PasswordBox>()).Text = password;
+    [Fact]
+    public void CreatingAnArchiveStartsAtHomeAndRemainsThereAfterSuccess()
+    {
+        using var fixture = new WindowFixture();
+        var source = fixture.WriteFile("中文原文.txt", "往返内容 📦");
+        fixture.Desktop.Inputs = [source];
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+        Assert.Contains("请选择要添加的文件或文件夹", fixture.Texts());
+        fixture.Click("选择文件…");
+        var archive = Path.Combine(fixture.DirectoryPath, "中文原文.zip");
+        Assert.Contains(fixture.Elements<TextBox>(), box => box.Text == archive);
+        fixture.Click("开始");
+        fixture.WaitForIdle();
+        Assert.True(File.Exists(archive));
+        Assert.Equal("往返内容 📦", fixture.ReadArchiveEntry(archive, "中文原文.txt"));
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).IsEffectivelyVisible);
+        Assert.Equal("压缩包创建完成。", fixture.Window.StatusMessage);
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.Click("打开压缩");
+        fixture.WaitForIdle();
+        Assert.Equal("中文原文.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+    }
+
+    [Fact]
+    public void RepeatedSourceSelectionsCanCombineFilesAndFoldersOrBeCleared()
+    {
+        using var fixture = new WindowFixture();
+        var file = fixture.WriteFile("first.txt", "first");
+        fixture.WriteFile("folder/second.txt", "second");
+        var folder = Path.Combine(fixture.DirectoryPath, "folder");
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+        fixture.Desktop.Inputs = [file]; fixture.Click("选择文件…");
+        fixture.Desktop.Inputs = [folder]; fixture.Click("选择文件…");
+        Assert.Contains("已选择 2 个文件或文件夹", fixture.Texts());
+        fixture.Click("清空");
+        Assert.Contains("请选择要添加的文件或文件夹", fixture.Texts());
+        fixture.Desktop.Inputs = [file]; fixture.Click("选择文件…");
+        fixture.Desktop.Inputs = [folder]; fixture.Click("选择文件…");
+        fixture.Click("开始"); fixture.WaitForIdle();
+        var archive = Path.Combine(fixture.DirectoryPath, "Archive.zip");
+        Assert.True(File.Exists(archive));
+        Assert.Equal("first", fixture.ReadArchiveEntry(archive, "first.txt"));
+        Assert.Equal("second", fixture.ReadArchiveEntry(archive, "folder/second.txt"));
+        Assert.Null(fixture.Window.CurrentLocation);
+    }
+
+    [Fact]
+    public void ExtractingOpensTheOutputFolderAndKeepsTheArchiveLocation()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("hello.txt", "content"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow();
+        fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Click("提取");
+        fixture.Click("开始"); fixture.WaitForIdle();
+        Assert.Equal("content", File.ReadAllText(Path.Combine(fixture.DirectoryPath, "导航测试", "hello.txt")));
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
+        Assert.Equal("提取完成。", fixture.Window.StatusMessage);
+        Assert.Equal(Path.Combine(fixture.DirectoryPath, "导航测试"), Assert.Single(fixture.Desktop.OpenedPaths));
+    }
+
+    [Fact]
+    public void ExtractingSelectedItemsOpensTheUserSpecifiedOutputFolder()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("one.txt", "one"), ("two.txt", "two"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.SelectItem("one.txt");
+        fixture.Click("提取");
+        var defaultOutput = Path.Combine(fixture.DirectoryPath, "导航测试");
+        var output = Path.Combine(fixture.DirectoryPath, "指定输出");
+        Assert.Single(fixture.Elements<TextBox>(), box => box.Text == defaultOutput).Text = output;
+        fixture.Host.UpdateLayout();
+        fixture.Click("开始"); fixture.WaitForIdle();
+        Assert.Equal(output, Assert.Single(fixture.Desktop.OpenedPaths));
+        Assert.Equal("one", File.ReadAllText(Path.Combine(output, "one.txt")));
+        Assert.False(File.Exists(Path.Combine(output, "two.txt")));
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+    }
+
+    [Fact]
+    public void FailedExtractionDoesNotOpenAFileManager()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("file.txt", "content"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Click("提取");
+        var defaultOutput = Path.Combine(fixture.DirectoryPath, "导航测试");
+        Assert.Single(fixture.Elements<TextBox>(), box => box.Text == defaultOutput).Text = fixture.DirectoryPath;
+        fixture.Host.UpdateLayout();
+        fixture.Click("开始"); fixture.WaitForIdle();
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+        Assert.Contains("提取文件", fixture.Texts());
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+    }
+
+    [Fact]
+    public void FailureToOpenTheOutputDoesNotReportExtractionAsFailed()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("file.txt", "content"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.Desktop.OpenFailure = new IOException("文件管理器不可用");
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Click("提取"); fixture.Click("开始"); fixture.WaitForIdle();
+        var output = Path.Combine(fixture.DirectoryPath, "导航测试");
+        Assert.Equal(output, Assert.Single(fixture.Desktop.OpenedPaths));
+        Assert.Equal("content", File.ReadAllText(Path.Combine(output, "file.txt")));
+        Assert.Equal("提取完成。", fixture.Window.StatusMessage);
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Contains(fixture.Texts(), text => text.Contains("解压已完成，但无法打开输出文件夹：文件管理器不可用"));
+    }
+
+    [Fact]
+    public void EncryptedArchiveCanBeCreatedAtHomeAndOpenedWithPassword()
+    {
+        using var fixture = new WindowFixture();
+        var source = fixture.WriteFile("机密.txt", "秘密");
+        fixture.Desktop.Inputs = [source];
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+        fixture.Click("选择文件…");
+        fixture.Elements<ComboBox>().First().SelectedIndex = 1;
+        fixture.Host.UpdateLayout();
+        foreach (var box in fixture.Elements<PasswordBox>()) box.Text = "secret";
         Assert.Single(fixture.Elements<CheckBox>(), box => box.Label == "加密文件名").Toggle();
         fixture.Host.UpdateLayout();
-        fixture.Click("开始");
-        fixture.WaitForIdle();
-
-        Assert.Equal("压缩包创建完成。", fixture.Window.StatusMessage);
-        Assert.True(File.Exists(archivePath));
-        var archive = Assert.Single(fixture.Window.VisibleItems, item => item.Path == archivePath);
-        fixture.Run(fixture.Window.OpenItemAsync(archive));
-
+        fixture.Click("开始"); fixture.WaitForIdle();
+        var archive = Path.Combine(fixture.DirectoryPath, "机密.7z");
+        Assert.True(File.Exists(archive));
+        Assert.Null(fixture.Window.CurrentLocation);
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.Click("打开压缩"); fixture.WaitForIdle();
+        Assert.Null(fixture.Window.CurrentLocation);
         Assert.Contains("打开压缩包", fixture.Texts());
-        Assert.Null(fixture.Window.CurrentLocation!.ArchivePath);
-        Assert.Single(fixture.Elements<PasswordBox>()).Text = password;
-        fixture.Click("打开");
-        fixture.WaitForIdle();
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "secret";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("机密.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+    }
 
-        Assert.Equal(archivePath, fixture.Window.CurrentLocation!.ArchivePath);
-        var file = Assert.Single(fixture.Window.VisibleItems);
-        Assert.Equal("机密.txt", file.Name);
-        Assert.True(file.IsEncrypted);
-        Assert.Empty(fixture.Elements<PasswordBox>());
-        Assert.DoesNotContain("打开压缩包", fixture.Texts());
-        Assert.False(fixture.Window.TaskIsRunning);
+    [Fact]
+    public void SelectedZipStoreLevelIsUsedForTheCreatedArchive()
+    {
+        using var fixture = new WindowFixture();
+        fixture.Desktop.Inputs = [fixture.WriteFile("level.txt", new string('x', 10000))];
+        fixture.OpenWindow(); fixture.Click("新建压缩"); fixture.Click("选择文件…");
+        fixture.Elements<ComboBox>().Skip(1).First().SelectedIndex = 0;
+        fixture.Host.UpdateLayout();
+        fixture.Click("开始"); fixture.WaitForIdle();
+        using var zip = System.IO.Compression.ZipFile.OpenRead(Path.Combine(fixture.DirectoryPath, "level.zip"));
+        var entry = Assert.Single(zip.Entries);
+        Assert.Equal(entry.Length, entry.CompressedLength);
+    }
+
+    [Fact]
+    public void EncryptedZipRequiresConfirmedPasswordAndPromptsWhenOpeningAFile()
+    {
+        using var fixture = new WindowFixture();
+        fixture.Desktop.Inputs = [fixture.WriteFile("secret.txt", "secret content")];
+        fixture.OpenWindow(); fixture.Click("新建压缩"); fixture.Click("选择文件…");
+        var passwords = fixture.Elements<PasswordBox>().ToArray();
+        passwords[0].Text = "中文密码";
+        fixture.Click("开始"); fixture.Host.UpdateLayout();
+        Assert.Contains("两次输入的密码不一致。", fixture.Texts());
+        passwords[1].Text = "中文密码";
+        fixture.Click("开始"); fixture.WaitForIdle();
+        var archive = Path.Combine(fixture.DirectoryPath, "secret.zip");
+        Assert.True(File.Exists(archive));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        Assert.Contains("打开加密文件", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "wrong";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        Assert.Contains("打开加密文件", fixture.Texts());
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "中文密码";
+        fixture.Click("打开"); fixture.WaitForIdle();
+        var opened = Assert.Single(fixture.Desktop.OpenedPaths);
+        Assert.Equal("secret content", File.ReadAllText(opened));
+    }
+
+    [Fact]
+    public void ExtractionDefaultsToPathsRelativeToCurrentArchiveFolder()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("docs/nested/file.txt", "content"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.Click("提取"); fixture.Click("开始"); fixture.WaitForIdle();
+        var output = Assert.Single(fixture.Desktop.OpenedPaths);
+        Assert.Equal("content", File.ReadAllText(Path.Combine(output, "nested", "file.txt")));
+        Assert.Equal("docs/", fixture.Window.CurrentLocation!.ArchivePrefix);
+    }
+
+    [Fact]
+    public void SelectingAnotherArchiveClearsThePreviousArchiveHistory()
+    {
+        using var fixture = new WindowFixture();
+        var first = fixture.CreateZip(("docs/file.txt", "one"));
+        var second = Path.Combine(fixture.DirectoryPath, "other.zip");
+        File.Copy(first, second);
+        fixture.Desktop.ArchiveChoice = first;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.Desktop.ArchiveChoice = second;
+        fixture.Click("打开压缩包…"); fixture.WaitForIdle();
+        Assert.Equal(second, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
+        fixture.Click("更多");
+        var menu = Assert.Single(fixture.Elements<ContextMenu>(), candidate => candidate.Items.OfType<MenuItem>().Any(item => item.Label == "查看"));
+        var view = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.Label == "查看");
+        var submenu = Assert.IsType<ContextMenu>(view.Submenu);
+        Assert.False(Assert.Single(submenu.Items.OfType<MenuItem>(), item => item.Label == "后退").IsEffectiveEnabled);
+    }
+
+    [Fact]
+    public void InvalidArchiveSelectionDoesNotReplaceTheCurrentArchive()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("inside.txt", "content"));
+        var invalid = fixture.WriteFile("invalid.zip", "not an archive");
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Desktop.ArchiveChoice = invalid;
+        fixture.Click("打开压缩包…"); fixture.WaitForIdle();
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("inside.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        Assert.True(Assert.Single(fixture.Elements<ArchivePane>()).IsEffectivelyVisible);
+        Assert.Contains(fixture.Elements<Button>(), button => button.Label == "关闭" && button.IsEffectivelyVisible);
+    }
+
+    [Fact]
+    public void HomeDialogMovesFocusInsideAndEscapeRestoresTheHomeButton()
+    {
+        using var fixture = new WindowFixture();
+        fixture.OpenWindow();
+        var create = fixture.FindButton("新建压缩");
+        Assert.True(create.RequestFocus());
+        fixture.Click("新建压缩");
+        var frame = Assert.Single(fixture.Elements<ArchiveDialogBorder>());
+        Assert.Contains(fixture.Host.Focus.Focused, frame.Descendants());
+        fixture.Host.Input.KeyPress(Key.Tab);
+        Assert.Contains(fixture.Host.Focus.Focused, frame.Descendants());
+        fixture.Host.Input.KeyPress(Key.Escape);
+        fixture.Host.UpdateLayout();
+        Assert.DoesNotContain("添加到压缩包", fixture.Texts());
+        Assert.Same(create, fixture.Host.Focus.Focused);
+    }
+
+    [Fact]
+    public void ArchiveMenuOpensAndDismissesTheAddDialog()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("file.txt", "content"));
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Click("更多");
+        var menu = Assert.Single(fixture.Elements<ContextMenu>(), candidate => candidate.Items.OfType<MenuItem>().Any(item => item.Label == "文件"));
+        var file = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.Label == "文件");
+        file.Click(); fixture.Host.UpdateLayout();
+        var submenu = Assert.IsType<ContextMenu>(file.Submenu);
+        Assert.Single(submenu.Items.OfType<MenuItem>(), item => item.Label == "添加到压缩包…").Click();
+        fixture.Host.UpdateLayout();
+        Assert.False(menu.IsOpen);
+        Assert.False(submenu.IsOpen);
+        Assert.Contains("添加到当前压缩包", fixture.Texts());
+        fixture.Click("取消");
+        Assert.DoesNotContain("添加到当前压缩包", fixture.Texts());
     }
 
     [Fact]
@@ -340,7 +412,7 @@ public sealed class MainWindowTests
         fixture.OpenWindow();
         fixture.Run(fixture.Window.NavigateToAsync(archive, "docs/"));
 
-        fixture.Click("＋ 添加");
+        fixture.Click("添加");
         Assert.Contains("添加到当前压缩包", fixture.Texts());
         Assert.Empty(fixture.Elements<ComboBox>());
         fixture.Click("选择文件…");
@@ -418,7 +490,7 @@ public sealed class MainWindowTests
         fixture.Desktop.Inputs = [source];
         fixture.OpenWindow();
         fixture.Run(fixture.Window.NavigateToAsync(archive));
-        fixture.Click("＋ 添加");
+        fixture.Click("添加");
         fixture.Click("选择文件…");
 
         var replace = Assert.Single(fixture.Elements<CheckBox>(), box => box.Label == "替换压缩包内的同名文件");
@@ -468,9 +540,8 @@ public sealed class MainWindowTests
             Host.Content.SetThemeDefaults(FluentTheme.Light);
             _ui = Host.InstallSynchronizationContext();
             Host.UpdateLayout();
-            Files = Assert.Single(Elements<ListBox>());
-            Address = Assert.Single(Elements<TextBox>(), box =>
-                box.Placeholder == "输入文件夹或压缩包路径，按 Return 打开");
+            Files = Elements<ArchivePane>().Last().Files;
+            Address = Elements<ArchivePane>().Last().Address;
         }
 
         public IEnumerable<T> Elements<T>() where T : Element => Host.Content.Descendants().OfType<T>();
@@ -479,7 +550,7 @@ public sealed class MainWindowTests
             .Select(block => string.Concat(block.Runs.Select(run => run.Text)));
 
         public Button FindButton(string label) => Assert.Single(Elements<Button>(),
-            button => button.GetType() == typeof(Button) && button.Label == label);
+            button => button is not MenuItem && button.Label == label);
 
         public void Click(string label)
         {
@@ -489,7 +560,7 @@ public sealed class MainWindowTests
 
         public void ClickEnabled(string label)
         {
-            var button = Assert.Single(Elements<Button>(), candidate => candidate.GetType() == typeof(Button) &&
+            var button = Assert.Single(Elements<Button>(), candidate => candidate is not MenuItem &&
                 candidate.Label == label && candidate.IsEffectiveEnabled);
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Host.UpdateLayout();
@@ -599,15 +670,25 @@ public sealed class MainWindowTests
         }
     }
 
-    private sealed class FakeDesktopServices : IDesktopServices
+    private sealed class FakeDesktopServices : IDesktopServices, IAsyncDesktopDialogService
     {
+        public TaskCompletionSource<bool>? DialogGate { get; set; }
+        public async Task<T> ShowDialogAsync<T>(Func<T> showDialog)
+        {
+            if (DialogGate is { } gate) await gate.Task;
+            return showDialog();
+        }
         public IReadOnlyList<string> Inputs { get; set; } = [];
+        public string? ArchiveChoice { get; set; }
+        public int ArchiveChoices { get; private set; }
         public string? SavePath { get; set; }
         public List<string> SaveSuggestions { get; } = [];
         public int TrashCalls { get; private set; }
+        public List<string> OpenedPaths { get; } = [];
+        public Exception? OpenFailure { get; set; }
 
         public IReadOnlyList<string> ChooseInputs() => Inputs;
-        public string? ChooseArchive() => null;
+        public string? ChooseArchive() { ArchiveChoices++; return ArchiveChoice; }
         public string? ChooseFolder(string? initialDirectory = null) => null;
         public string? ChooseSavePath(string suggestedName, string? initialDirectory = null)
         {
@@ -617,7 +698,7 @@ public sealed class MainWindowTests
         public bool Confirm(string title, string message, string confirmLabel) => false;
         public void ShowMessage(string title, string message) { }
         public void Reveal(string path) { }
-        public void Open(string path) { }
+        public void Open(string path) { OpenedPaths.Add(path); if (OpenFailure is not null) throw OpenFailure; }
         public void Trash(IReadOnlyList<string> paths) => TrashCalls++;
     }
 }
