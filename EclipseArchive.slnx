@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EclipseArchive.Core/EclipseArchive.Core.csproj" />
+    <Project Path="src/EclipseArchive/EclipseArchive.csproj" />
+    <Project Path="src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EclipseArchive.Core.Tests/EclipseArchive.Core.Tests.csproj" />
+    <Project Path="tests/EclipseArchive.Ui.Tests/EclipseArchive.Ui.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,161 @@
+@namespace EclipseArchive
+@using EclipseUI
+@using EclipseUI.Elements
+
+<Window Title="EclipseArchive" Width="1140" Height="740">
+    <Grid Ref={RootGrid}>
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" IsEnabled={_panel == DialogKind.None}>
+            <Menu Ref={MainMenu} Padding="4">
+                <MenuItem Label="文件">
+                    <Slot Name="Submenu"><ContextMenu>
+                        <MenuItem Label="打开…    ⌘O" OnClick={ChooseAndOpen} />
+                        <MenuItem Label="打开所选项目    Return" OnClick={OpenSelected} />
+                        <MenuItem Label="添加到压缩包…" OnClick={PrepareCreate} IsEnabled={CanAdd} />
+                        <MenuItem Label="提取…" OnClick={PrepareExtract} IsEnabled={CanExtract} />
+                        <MenuItem Label="测试压缩包" OnClick={PrepareTest} IsEnabled={CanExtract} />
+                        <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
+                    </ContextMenu></Slot>
+                </MenuItem>
+                <MenuItem Label="编辑">
+                    <Slot Name="Submenu"><ContextMenu>
+                        <MenuItem Label="全选    ⌘A" OnClick={SelectAll} />
+                        <MenuItem Label="复制到…" OnClick={CopySelected} IsEnabled={CanCopy} />
+                        <MenuItem Label="移动到…" OnClick={MoveSelected} IsEnabled={CanManageFiles} />
+                        <MenuItem Label={_snapshot?.ArchivePath is null ? "移到废纸篓" : "从压缩包删除…"} OnClick={TrashSelected} IsEnabled={CanDelete} />
+                        <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
+                    </ContextMenu></Slot>
+                </MenuItem>
+                <MenuItem Label="查看">
+                    <Slot Name="Submenu"><ContextMenu>
+                        <MenuItem Label="刷新    ⌘R" OnClick={Refresh} />
+                        <MenuItem Label="显示 / 隐藏点文件" OnClick={ToggleHidden} />
+                        <MenuItem Label="切换明暗外观" OnClick={CycleTheme} />
+                        <MenuItem Label="在 Finder 中显示" OnClick={RevealLocation} />
+                    </ContextMenu></Slot>
+                </MenuItem>
+                <MenuItem Label="收藏夹">
+                    <Slot Name="Submenu"><ContextMenu>
+                        <MenuItem Label="个人文件夹" OnClick={GoHome} />
+                        <MenuItem Label="桌面" OnClick={GoDesktop} />
+                        <MenuItem Label="下载" OnClick={GoDownloads} />
+                    </ContextMenu></Slot>
+                </MenuItem>
+                <MenuItem Label="帮助" OnClick={ShowAbout} />
+            </Menu>
+            <Border Grid.Row="1" Padding="8" BorderThickness="0">
+                <WrapPanel Gap="8" IsEnabled={!_busy}>
+                    <Button MinWidth="86" Height="42" OnClick={PrepareCreate} IsEnabled={CanAdd}>＋ 添加</Button>
+                    <Button MinWidth="86" Height="42" OnClick={PrepareExtract} IsEnabled={CanExtract}>↓ 提取</Button>
+                    <Button MinWidth="86" Height="42" OnClick={PrepareTest} IsEnabled={CanExtract}>测试</Button>
+                    <Button MinWidth="86" Height="42" OnClick={CopySelected} IsEnabled={CanCopy}>复制</Button>
+                    <Button MinWidth="86" Height="42" OnClick={MoveSelected} IsEnabled={CanManageFiles}>移动</Button>
+                    <Button MinWidth="86" Height="42" OnClick={TrashSelected} IsEnabled={CanDelete}>删除</Button>
+                    <Button MinWidth="86" Height="42" OnClick={ShowProperties} IsEnabled={HasSelection}>信息</Button>
+                    <Button MinWidth="86" Height="42" OnClick={ChooseAndOpen}>打开…</Button>
+                </WrapPanel>
+            </Border>
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Gap="6" Padding="8" IsEnabled={!_busy}>
+                <Button OnClick={GoBack} IsEnabled={_history.Count > 0}>←</Button>
+                <Button Grid.Column="1" OnClick={GoUp}>↑</Button>
+                <Button Grid.Column="2" OnClick={GoHome}>主目录</Button>
+                <TextBox Grid.Column="3" Ref={AddressBox} Placeholder="输入文件夹或压缩包路径，按 Return 打开" />
+                <Button Grid.Column="4" OnClick={Refresh}>刷新</Button>
+            </Grid>
+            <Grid Grid.Row="3" RowDefinitions="Auto,*" IsEnabled={!_busy}>
+                <Grid ColumnDefinitions="*,105,105,115,170,72,18" Padding="8">
+                    <Button OnClick={() => SortBy("name")}>名称</Button>
+                    <Button Grid.Column="1" OnClick={() => SortBy("size")}>大小</Button>
+                    <Button Grid.Column="2" OnClick={() => SortBy("packed")}>压缩后</Button>
+                    <Button Grid.Column="3" OnClick={() => SortBy("type")}>类型</Button>
+                    <Button Grid.Column="4" OnClick={() => SortBy("modified")}>修改时间</Button>
+                    <Button Grid.Column="5" OnClick={() => SortBy("attributes")}>属性</Button>
+                </Grid>
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                    <FileListBox Ref={Files} SelectionMode="Extended" />
+                </ScrollViewer>
+            </Grid>
+            @if (_error.Length > 0) {
+                <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Padding="10" Gap="8">
+                    <TextBlock TextWrapping="Wrap" Style="Foreground: theme(#FFFFB4AB, #FFB3261E)">{_error}</TextBlock>
+                    <Button Grid.Column="1" OnClick={DismissError}>关闭</Button>
+                </Grid>
+            }
+            <Grid Grid.Row="5" ColumnDefinitions="*,Auto" Padding="10">
+                <TextBlock FontSize="12">{StatusMessage}</TextBlock>
+                <TextBlock Grid.Column="1" FontSize="12">{SelectionSummary}</TextBlock>
+            </Grid>
+        </Grid>
+        <ContextMenu Target={Files}>
+            <MenuItem Label="打开" OnClick={OpenSelected} />
+            <MenuItem Label="添加到压缩包…" OnClick={PrepareCreate} IsEnabled={CanAdd} />
+            <MenuItem Label="提取…" OnClick={PrepareExtract} IsEnabled={CanExtract} />
+            <MenuItem Label="复制到…" OnClick={CopySelected} IsEnabled={CanCopy} />
+            <MenuItem Label={_snapshot?.ArchivePath is null ? "移到废纸篓" : "从压缩包删除…"} OnClick={TrashSelected} IsEnabled={CanDelete} />
+            <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
+            <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
+        </ContextMenu>
+        @if (_panel != DialogKind.None) {
+            <Grid Style="Background: #66000000">
+                <Border Width="560" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="22" CornerRadius="6" BorderColor="#808080" Style="Background: theme(#FF252525, #FFF8F8F8)">
+                    <StackPanel Gap="14">
+                        <TextBlock FontSize="22">{DialogTitle}</TextBlock>
+                        <TextBlock FontSize="13" TextWrapping="Wrap">{DialogDescription}</TextBlock>
+                        @if (_panel == DialogKind.Create || _panel == DialogKind.AddToArchive) {
+                            <Grid ColumnDefinitions="*,Auto" Gap="8">
+                                <TextBlock TextWrapping="Wrap">{SourceSummary}</TextBlock>
+                                <Button Grid.Column="1" OnClick={ChooseCreateInputs}>选择文件…</Button>
+                            </Grid>
+                        }
+                        @if (_panel == DialogKind.Create) {
+                            <Grid ColumnDefinitions="100,*" Gap="8">
+                                <TextBlock>压缩格式</TextBlock>
+                                <ComboBox Grid.Column="1" ItemsSource={_formatNames} @bind-SelectedIndex={FormatIndex} />
+                            </Grid>
+                        }
+                        @if (_panel == DialogKind.AddToArchive) {
+                            <CheckBox @bind-Checked={_replaceExisting}>替换压缩包内的同名文件</CheckBox>
+                        }
+                        @if (_panel == DialogKind.DeleteEntries) {
+                            <TextBlock TextWrapping="Wrap">{string.Join("\n", _editEntries.Take(6))}</TextBlock>
+                        }
+                        @if (_panel == DialogKind.Rename) {
+                            <TextBlock>新名称</TextBlock>
+                            <TextBox @bind-Text={_newName} />
+                        }
+                        @if (_panel == DialogKind.Create || _panel == DialogKind.Extract) {
+                            <TextBlock>{_panel == DialogKind.Create ? "压缩包路径" : "输出文件夹（新建）"}</TextBlock>
+                            <Grid ColumnDefinitions="*,Auto" Gap="8">
+                                <TextBox @bind-Text={_destination} />
+                                <Button Grid.Column="1" OnClick={ChooseDestination}>浏览…</Button>
+                            </Grid>
+                        }
+                        @if (_panel == DialogKind.Unlock || _panel == DialogKind.Extract || _panel == DialogKind.Test || _panel == DialogKind.Create && _formatIndex == 1 || IsArchiveEditDialog) {
+                            <TextBlock>密码（无密码可留空）</TextBlock>
+                            <PasswordBox @bind-Text={_password} />
+                        }
+                        @if (_panel == DialogKind.Create && _formatIndex == 1) {
+                            <CheckBox @bind-Checked={_encryptNames}>加密文件名</CheckBox>
+                        }
+                        @if (_panel == DialogKind.Create && _formatIndex == 0) {
+                            <TextBlock FontSize="12" TextWrapping="Wrap">ZIP 使用标准 Deflate 压缩。如需密码保护，请选择 7z。</TextBlock>
+                        }
+                        @if (_panel == DialogKind.Progress) {
+                            <ProgressBar Value={_progress} IsIndeterminate={_progress < 0} Height="8" />
+                            <TextBlock FontSize="12" TextWrapping="Wrap">{_progressText}</TextBlock>
+                            <Button OnClick={CancelOperation} IsEnabled={!_cancelRequested}>取消</Button>
+                        }
+                        @if (_panel != DialogKind.Progress) {
+                            <WrapPanel Gap="8">
+                                <Button MinWidth="96" OnClick={ConfirmDialog} IsEnabled={!_busy}>{DialogConfirmLabel}</Button>
+                                <Button MinWidth="96" OnClick={CloseDialog}>取消</Button>
+                            </WrapPanel>
+                        }
+                        @if (_dialogError.Length > 0) {
+                            <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFFFB4AB, #FFB3261E)">{_dialogError}</TextBlock>
+                        }
+                    </StackPanel>
+                </Border>
+            </Grid>
+        }
+    </Grid>
+</Window>

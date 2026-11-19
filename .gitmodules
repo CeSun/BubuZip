@@ -1,0 +1,3 @@
+[submodule "external/EclipseUI"]
+	path = external/EclipseUI
+	url = https://github.com/CeSun/EclipseUI.git

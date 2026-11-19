@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EclipseArchive.Desktop</RootNamespace>
+    <Description>EclipseArchive macOS desktop application.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../EclipseArchive/EclipseArchive.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.MacOS/EclipseUI.Platform.MacOS.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering.Vello/EclipseUI.Rendering.Vello.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Text.Shaping/EclipseUI.Text.Shaping.csproj" />
+  </ItemGroup>
+</Project>

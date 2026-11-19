@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>EclipseArchive.Core</RootNamespace>
+    <Description>Stream-based archive operations backed by SharpCompress.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.51.0-beta.174" />
+  </ItemGroup>
+</Project>
