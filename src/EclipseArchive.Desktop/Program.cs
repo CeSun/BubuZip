@@ -68,7 +68,9 @@ var window = (MainWindow)app.MainWindow!;
 using var openDocuments = OperatingSystem.IsMacOS()
     ? new MacOpenDocuments(window.RequestOpenArchive)
     : null;
-var exitCode = app.Services.GetRequiredService<IApplicationLifetime>().Run(app, args);
+var exitCode = OperatingSystem.IsMacOS() && openDocuments is not null
+    ? new MacArchiveLifetime(openDocuments).Run(app, args)
+    : app.Services.GetRequiredService<IApplicationLifetime>().Run(app, args);
 if (options.FrameLimit is not null)
 {
     Console.WriteLine($"archive: {window.CurrentLocation?.ArchivePath ?? "(none)"}");

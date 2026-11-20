@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 UPSTREAM = ROOT / "external/EclipseUI/eng/bundle_macos.py"
 FINDER_SOURCE = ROOT / "eng/macos-finder-extension"
 FINDER_NAME = "EclipseArchiveFinder.appex"
+FINDER_REQUEST_TYPE = "io.eclipsearchive.finder-request"
+FINDER_REQUEST_EXTENSION = "eclipsearchive-request"
 
 # Imported declarations advertise existing formats; EclipseArchive never claims to own them.
 # Standard identifiers match CoreServices. Aliases share one identifier and one declaration.
@@ -76,11 +78,31 @@ def archive_metadata():
             "EclipseArchiveArchiveTypes": mapping}
 
 
+def bundle_metadata():
+    metadata = archive_metadata()
+    # Finder sends this private document through Launch Services. It is not an
+    # archive format or a URL command; the app validates the request's origin.
+    metadata["CFBundleDocumentTypes"].append({
+        "CFBundleTypeName": "EclipseArchive Finder request",
+        "CFBundleTypeRole": "Viewer",
+        "LSHandlerRank": "Alternate",
+        "LSItemContentTypes": [FINDER_REQUEST_TYPE],
+        "CFBundleTypeExtensions": [FINDER_REQUEST_EXTENSION],
+    })
+    metadata["UTExportedTypeDeclarations"] = [{
+        "UTTypeIdentifier": FINDER_REQUEST_TYPE,
+        "UTTypeDescription": "EclipseArchive Finder request",
+        "UTTypeConformsTo": ["public.data"],
+        "UTTypeTagSpecification": {"public.filename-extension": [FINDER_REQUEST_EXTENSION]},
+    }]
+    return metadata
+
+
 def configure_metadata(app, version, minimum_system_version):
     info_path = app / "Contents/Info.plist"
     with info_path.open("rb") as stream:
         info = plistlib.load(stream)
-    info.update(archive_metadata())
+    info.update(bundle_metadata())
     info["EclipseArchiveFinderExtensionIdentifier"] = info["CFBundleIdentifier"] + ".finder"
     with info_path.open("wb") as stream:
         plistlib.dump(info, stream)
@@ -97,10 +119,10 @@ def configure_metadata(app, version, minimum_system_version):
 def verify_metadata(app):
     with (app / "Contents/Info.plist").open("rb") as stream:
         info = plistlib.load(stream)
-    expected = archive_metadata()
+    expected = bundle_metadata()
     for key, value in expected.items():
         if info.get(key) != value:
-            raise ValueError(f"Bundle has missing or inconsistent archive document metadata: {key}")
+            raise ValueError(f"Bundle has missing or inconsistent document metadata: {key}")
     plugin_path = app / "Contents/PlugIns" / FINDER_NAME
     with (plugin_path / "Contents/Info.plist").open("rb") as stream:
         plugin = plistlib.load(stream)

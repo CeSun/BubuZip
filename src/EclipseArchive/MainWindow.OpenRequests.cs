@@ -4,8 +4,33 @@ namespace EclipseArchive;
 
 public partial class MainWindow
 {
+    public Func<string, ArchiveShellRequest?>? ShellRequestDecoder { get; set; }
+
     private readonly ConcurrentQueue<ArchiveShellRequest> _openRequests = new();
     private bool _openingRequestedArchive;
+
+    // The macOS host calls this while its native window is still hidden. Only
+    // decode/reroute here; operation work begins under the host's UI context.
+    public void PrepareInitialRequests()
+    {
+        var pending = new List<ArchiveShellRequest>();
+        while (_openRequests.TryDequeue(out var request))
+        {
+            try
+            {
+                if (request.Action == ArchiveShellAction.Open && ShellRequestDecoder?.Invoke(request.Paths[0]) is { } decoded)
+                    request = decoded;
+                if (request.Action != ArchiveShellAction.Open) OperationOnly = true;
+                pending.Add(request);
+            }
+            catch (Exception error)
+            {
+                OperationOnly = true;
+                ReportError(error);
+            }
+        }
+        foreach (var request in pending) RequestShellAction(request);
+    }
 
     // OS callbacks may arrive before the window exists or from a native event callback.
     // Only enqueue here; navigation starts on the UI context during the next update.

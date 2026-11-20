@@ -71,6 +71,26 @@ class MetadataTests(unittest.TestCase):
         for first, alias in ((".gz", ".gzip"), (".bz2", ".bzip2"), (".tbz", ".tbz2"), (".lz", ".lzip"), (".zst", ".zstd")):
             self.assertEqual(mapping[first], mapping[alias])
 
+    def test_private_finder_requests_are_owned_data_documents_not_archive_formats(self):
+        archives = packaging.archive_metadata()
+        metadata = packaging.bundle_metadata()
+        self.assertEqual(metadata["EclipseArchiveArchiveTypes"], archives["EclipseArchiveArchiveTypes"])
+        self.assertEqual(metadata["UTImportedTypeDeclarations"], archives["UTImportedTypeDeclarations"])
+        self.assertNotIn("." + packaging.FINDER_REQUEST_EXTENSION, metadata["EclipseArchiveArchiveTypes"])
+        self.assertEqual(len(metadata["CFBundleDocumentTypes"]), len(archives["CFBundleDocumentTypes"]) + 1)
+        request = metadata["CFBundleDocumentTypes"][-1]
+        self.assertEqual(request["LSItemContentTypes"], [packaging.FINDER_REQUEST_TYPE])
+        self.assertEqual(request["CFBundleTypeExtensions"], [packaging.FINDER_REQUEST_EXTENSION])
+        self.assertEqual(request["CFBundleTypeRole"], "Viewer")
+        self.assertEqual(request["LSHandlerRank"], "Alternate")
+        exported = metadata["UTExportedTypeDeclarations"]
+        self.assertEqual(len(exported), 1)
+        self.assertEqual(exported[0]["UTTypeIdentifier"], packaging.FINDER_REQUEST_TYPE)
+        self.assertEqual(exported[0]["UTTypeConformsTo"], ["public.data"])
+        self.assertEqual(exported[0]["UTTypeTagSpecification"]["public.filename-extension"],
+                         [packaging.FINDER_REQUEST_EXTENSION])
+        self.assertNotIn("CFBundleURLTypes", metadata)
+
     def test_configure_and_verify_plugin_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             app = Path(directory) / "Archive.app"
@@ -79,6 +99,9 @@ class MetadataTests(unittest.TestCase):
             write_plugin(plugin)
             packaging.configure_metadata(app, "2.3.4", "13.0")
             self.assertEqual(packaging.verify_metadata(app), plugin)
+            with (app / "Contents/Info.plist").open("rb") as stream:
+                self.assertEqual(plistlib.load(stream)["UTExportedTypeDeclarations"],
+                                 packaging.bundle_metadata()["UTExportedTypeDeclarations"])
             with (plugin / "Contents/Info.plist").open("rb") as stream:
                 info = plistlib.load(stream)
             self.assertEqual(info["CFBundleVersion"], "2.3.4")
@@ -100,6 +123,26 @@ class MetadataTests(unittest.TestCase):
                 plistlib.dump(info, stream)
             with self.assertRaisesRegex(ValueError, "document metadata"):
                 packaging.verify_metadata(app)
+
+    def test_verify_requires_the_private_finder_document_and_its_exported_declaration(self):
+        for missing in ("document", "exported type"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                app = Path(directory) / "Archive.app"
+                write_app(app)
+                write_plugin(app / "Contents/PlugIns" / packaging.FINDER_NAME)
+                packaging.configure_metadata(app, "0.1.0", "13.0")
+                path = app / "Contents/Info.plist"
+                with path.open("rb") as stream:
+                    info = plistlib.load(stream)
+                if missing == "document":
+                    info["CFBundleDocumentTypes"] = [item for item in info["CFBundleDocumentTypes"]
+                                                     if packaging.FINDER_REQUEST_TYPE not in item["LSItemContentTypes"]]
+                else:
+                    del info["UTExportedTypeDeclarations"]
+                with path.open("wb") as stream:
+                    plistlib.dump(info, stream)
+                with self.assertRaisesRegex(ValueError, "document metadata"):
+                    packaging.verify_metadata(app)
 
 
 class OrchestrationTests(unittest.TestCase):

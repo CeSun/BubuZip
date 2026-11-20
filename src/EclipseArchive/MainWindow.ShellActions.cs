@@ -10,6 +10,11 @@ public partial class MainWindow
     private async Task HandleShellRequestAsync(ArchiveShellRequest request)
     {
         var paths = request.Paths.Select(ArchivePaths.ResolveUserPath).ToArray();
+        if (request.Action == ArchiveShellAction.Open && ShellRequestDecoder?.Invoke(paths[0]) is { } command)
+        {
+            RequestShellAction(command);
+            return;
+        }
         foreach (var path in paths)
             if (!File.Exists(path) && !Directory.Exists(path)) throw new FileNotFoundException("所选文件或文件夹已不存在。", path);
         if (request.Action == ArchiveShellAction.Open)

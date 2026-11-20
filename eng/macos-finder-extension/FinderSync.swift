@@ -5,6 +5,7 @@ import FinderSync
 /// Finder supplies the selection; the application performs every archive operation.
 @objc(EclipseArchiveFinderSync)
 final class EclipseArchiveFinderSync: FIFinderSync {
+    private let transport = FinderRequestTransport()
     private static let archiveExtensions: Set<String> = [
         "zip", "zipx", "7z", "rar", "tar", "gz", "gzip", "tgz", "bz2", "bzip2",
         "tbz", "tbz2", "xz", "txz", "lz", "lzip", "tlz", "zst", "zstd", "tzst",
@@ -41,18 +42,18 @@ final class EclipseArchiveFinderSync: FIFinderSync {
                 (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == false
         }
         if allArchives {
-            add("打开压缩包", verb: "open", urls: urls, to: actions)
-            add("提取文件…", verb: "extract", urls: urls, to: actions)
-            add("提取到此处", verb: "extract-here", urls: urls, to: actions)
+            add("打开压缩包", action: .open, kind: menuKind, to: actions)
+            add("提取文件…", action: .extract, kind: menuKind, to: actions)
+            add("提取到此处", action: .extractHere, kind: menuKind, to: actions)
             let name = urls.count == 1 ? archiveBaseName(urls[0]) : "各自同名文件夹"
-            add("提取到“\(name)/”", verb: "extract-folder", urls: urls, to: actions)
-            add("测试压缩包", verb: "test", urls: urls, to: actions)
+            add("提取到“\(name)/”", action: .extractFolder, kind: menuKind, to: actions)
+            add("测试压缩包", action: .test, kind: menuKind, to: actions)
             actions.addItem(.separator())
         }
-        add("添加到压缩包…", verb: "compress", urls: urls, to: actions)
+        add("添加到压缩包…", action: .compress, kind: menuKind, to: actions)
         // The app chooses a collision-free output name from the selected file or folder.
-        add("压缩为 7z", verb: "compress-7z", urls: urls, to: actions)
-        add("压缩为 ZIP", verb: "compress-zip", urls: urls, to: actions)
+        add("压缩为 7z", action: .compress7z, kind: menuKind, to: actions)
+        add("压缩为 ZIP", action: .compressZip, kind: menuKind, to: actions)
 
         let parent = NSMenuItem(title: "EclipseArchive", action: nil, keyEquivalent: "")
         parent.submenu = actions
@@ -66,36 +67,40 @@ final class EclipseArchiveFinderSync: FIFinderSync {
         return name
     }
 
-    private func add(_ title: String, verb: String, urls: [URL], to menu: NSMenu) {
+    private func add(_ title: String, action: FinderArchiveAction, kind: FIMenuKind, to menu: NSMenu) {
         let item = NSMenuItem(title: title, action: #selector(invoke(_:)), keyEquivalent: "")
-        item.target = self
-        item.representedObject = Request(verb: verb, paths: urls.map(\.path))
+        item.tag = FinderMenuCommand(action: action, menuKind: kind).tag
         menu.addItem(item)
     }
 
     @objc private func invoke(_ item: NSMenuItem) {
-        guard let request = item.representedObject as? Request else { return }
-        // .app/Contents/PlugIns/EclipseArchiveFinder.appex -> enclosing .app.
-        let application = Bundle.main.bundleURL.deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        guard application.pathExtension.lowercased() == "app" else { return }
-        let batches = request.verb.hasPrefix("compress") ? [request.paths] : request.paths.map { [$0] }
-        for paths in batches {
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            // Each archive gets its own operation window, including when the app is running.
-            // Argument arrays preserve spaces, quotes and non-ASCII names without a shell.
-            configuration.createsNewApplicationInstance = true
-            configuration.arguments = ["--shell", request.verb, "--"] + paths
-            NSWorkspace.shared.openApplication(at: application, configuration: configuration) { _, error in
-                if let error { NSLog("EclipseArchive Finder action failed: %@", error.localizedDescription) }
+        NSLog("EclipseArchive Finder action received (tag=%ld)", item.tag)
+        do {
+            guard let command = FinderMenuCommand(tag: item.tag) else {
+                throw FinderRequestFailure.invalidSelection
             }
+            let controller = FIFinderSyncController.default()
+            let paths = try command.paths(selected: controller.selectedItemURLs(), targeted: controller.targetedURL())
+            let application = try FinderRequestTransport.containingApplication(
+                extensionBundle: Bundle(for: EclipseArchiveFinderSync.self).bundleURL)
+            try transport.send(action: command.action, paths: paths, application: application) { error in
+                Self.reportFailure(error)
+            }
+        } catch {
+            Self.reportFailure(error)
         }
     }
 
-    private final class Request: NSObject {
-        let verb: String
-        let paths: [String]
-        init(verb: String, paths: [String]) { self.verb = verb; self.paths = paths }
+    private static func reportFailure(_ error: Error) {
+        NSLog("EclipseArchive Finder action failed: %@", error.localizedDescription)
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "无法执行 EclipseArchive 菜单操作"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "好")
+            alert.window.level = .floating
+            alert.runModal()
+        }
     }
 }

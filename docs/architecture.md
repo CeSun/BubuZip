@@ -26,7 +26,7 @@ EclipseArchive/
 
 `src/EclipseArchive` 包含 `MainWindow.ui` 与对应交互代码、`FileListBox`、`BrowserService`，以及 `IDesktopServices` 接口。它引用 Core 和子模块中的 Runtime、Rendering、主题及 `.ui` 编译生成器。
 
-`ArchivePane` 保存当前归档的浏览快照、密码、排序、历史与选择。`MainWindow.NavigateToAsync` 拒绝本地目录；上一级在归档根目录停止，切换归档时清空历史，路径栏为只读，返回首页清空当前归档。后台操作及模态对话框期间禁止切换操作目标。`ArchiveControls` 提供跨平台矢量图标、平面命令按钮、只读路径栏和列分隔线；不修改 EclipseUI 子模块。
+`ArchivePane` 保存当前归档的浏览快照、密码、排序、历史与选择。`MainWindow.NavigateToAsync` 拒绝本地目录；上一级在归档根目录停止，切换归档时清空历史，路径栏为只读，返回首页清空当前归档。后台操作及模态对话框期间禁止切换操作目标。`ArchiveControls` 提供跨平台矢量图标、平面命令按钮、只读路径栏和列分隔线。
 
 归档浏览界面的参考来自相邻 NanaZip 仓库的 `NanaZip.Modern/MainWindowToolBarPage.xaml`、`StatusBarTemplate.xaml` 和 `Documents/MainWindowLightMode.png`、`MainWindowDarkMode.png`。应用保留 EclipseArchive 名称和现有 ZIP/7z 能力，标题栏和文件选择由宿主操作系统提供。性能测试使用内存中的 4 MiB 数据执行 ZIP 压缩、解压并校验，数值不等同于 NanaZip 的 LZMA 基准。
 
@@ -38,7 +38,7 @@ EclipseArchive/
 
 ## 框架依赖
 
-`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `a724920613405845953aec215b9bafe7d9c5a554`。
+`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `41cb24c82fe20d9289969f581078970a22011424`。
 
 应用通过子模块内的项目引用使用框架。主仓库的子模块记录决定实际框架版本，构建与旁边的 EclipseUI 检出目录无关。这样不同开发者和构建环境可以还原相同依赖，也不会意外使用框架工作目录中的未提交修改。
 
@@ -62,7 +62,9 @@ git submodule update --init --recursive
 
 `BrowserService` 提供归档快照；主窗口仅调用其归档浏览入口。归档路径使用 `archive.zip!/folder/` 表示；缺少显式目录条目的归档也会合成虚拟目录。嵌套压缩文件按需提取到私有临时目录并以只读方式逐层打开，显示路径使用 `outer.zip!/inner.7z!/`；每层保存父归档位置及密码，返回可跨层，最外层根目录不可进入系统目录。临时副本在返回首页、切换外层归档或关闭应用时清理；提取默认保存到最外层压缩包所在目录。浏览不要求先将整包解压到磁盘。
 
-添加对话框选择源文件、目标路径以及 ZIP、7z、TAR、TAR.GZ、TAR.BZ2、TAR.LZ、TAR.ZST、GZ、BZ2、LZ 或 ZST；单文件流仅接受一个源文件。ZIP、7z 和 GZip 可选压缩级别，ZIP 支持 AES-256 和 ZipCrypto，7z 可加密文件名。提取支持所选条目、所选目录及整包内容，并可选择完整路径、相对于当前目录或不包含目录；测试逐条读取文件。操作在后台执行，进度按条目更新，用户可取消。创建或提取成功后进度窗口保留并显示 100% 和成功状态，可确认关闭或打开输出文件夹；创建时打开归档所在目录，提取时打开输出目录。提取成功提交后仍自动通过桌面服务打开输出目录；打开失败在成功窗口单独报告，可再次尝试，保留提取成功状态和当前归档位置。
+添加对话框选择源文件、目标路径以及 ZIP、7z、TAR、TAR.GZ、TAR.BZ2、TAR.LZ、TAR.ZST、GZ、BZ2、LZ 或 ZST；单文件流仅接受一个源文件。ZIP、7z 和 GZip 可选压缩级别，ZIP 支持 AES-256 和 ZipCrypto，7z 可加密文件名。提取支持所选条目、所选目录及整包内容，并可选择完整路径、相对于当前目录或不包含目录；测试逐条读取文件。操作在后台执行，进度按条目更新，用户可取消。桌面主界面的压缩、解压通过 `IArchiveOperationWindows` 显示独立原生模态窗口，`ArchiveOperationWindow` 拥有任务、进度、取消和结果状态；关闭时同步等待后台清理，主窗口随后恢复。成功后保留 100% 和成功状态，可确认关闭或主动打开输出文件夹；不自动弹出输出目录。Win32 次窗口使用 `quitOnDestroy=false`，关闭时不向父窗口消息循环发送退出消息。
+
+右键菜单的操作进入 `OperationOnly` 小窗口，不显示首页或归档浏览面板；需要参数或密码时也在该窗口内处理。关闭按钮将释放窗口的工作投递到下一批 UI 回调，当前原生消息批次内的鼠标及焦点事件仍使用有效界面；标题栏关闭后由宿主循环退出后的清理流程取消并等待任务。Windows 在启动参数解析后即可选择模式。macOS 的 `MacArchiveLifetime` 先创建隐藏原生窗口，等待初始文档或正常启动通知；`PrepareInitialRequests` 同步校验、解码和重排请求，再初始化最终窗口。后台操作仅在正式 UI 同步上下文中启动，避免主界面先闪现。普通启动及普通归档打开仍显示完整主界面。
 
 ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加密 ZIP 保持只读。添加保留源顶层名称，支持在当前归档子目录内添加；同名文件默认拒绝，只有勾选替换后才能覆盖。归档内“复制”转为提取所选内容。打开归档内文件会先提取副本交由系统默认应用处理，副本不会自动回写。
 
@@ -74,7 +76,11 @@ ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加�
 
 `WindowsShellIntegration` 仅在 HKCU 注册本应用 ProgID、Capabilities 和可用打开程序，再打开 Windows 默认应用页面让用户确认；不生成或覆盖受保护的 `UserChoice`。状态通过系统有效 ProgID 查询，区分候选注册与实际默认应用。菜单写在文件与目录的经典级联 shell verb 中，Windows 11 位于“显示更多选项”；当前采用单选模型，用户路径作为独立的引用参数传入可执行文件，卸载仅删除当前可执行文件拥有的菜单键。Windows 发布版之外的开发宿主不可注册。
 
-macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.app` 放入 `Contents/PlugIns/EclipseArchiveFinder.appex`。注册后必须由用户在系统扩展页面启用；扩展监控真实用户主目录与 `/Volumes`，菜单只在范围内显示。扩展读取当前 Finder 选择，根据文件类型生成 EclipseArchive 子菜单，通过 `NSWorkspace.OpenConfiguration` 的参数数组启动包含它的应用，每个菜单请求创建一个应用实例，避免已有进程忽略启动参数。普通 Finder 文件打开仍通过应用层 SDL 文件事件监听进入现有窗口。
+macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.app` 放入 `Contents/PlugIns/EclipseArchiveFinder.appex`。注册后必须由用户在系统扩展页面启用；扩展监控真实用户主目录与 `/Volumes`，菜单只在范围内显示。访达跨进程传递菜单时不保留任意 `representedObject`，因此菜单项用支持的 `tag` 编码操作和菜单上下文，点击时重新取得 Finder 选择；不依赖原菜单项实例或自定义对象。
+
+扩展处于沙盒中，`NSWorkspace.OpenConfiguration.arguments` 会被系统忽略。操作通过私有请求文档交付：扩展在自身容器的应用支持目录写入受限权限、随机命名的 `.eclipsearchive-request`，再用 `NSWorkspace.open(_:withApplicationAt:configuration:)` 向包含它的应用发送标准文档打开事件。普通文件打开与请求文档均由应用层 SDL 文件事件监听接收；请求文档由 `MacFinderRequestFile` 解码为 `ArchiveShellRequest`，保留现有 UI 队列与后台流程。公开 CLI 及 Windows 注册表菜单继续使用 `--shell` 参数。
+
+请求文档单独声明为本应用拥有的私有数据类型，不加入 25 种归档格式关联列表，也不注册可从网页调用的 URL 操作协议。读取器只接受扩展私有目录中的直属请求，检查文件名、所有者、权限、链接、大小、时效、协议版本、操作白名单和路径；成功读取后删除，不能重放。来源不符、过期或不合法的请求不会执行。扩展写入和启动失败会记录日志并显示提示，主程序解码或执行失败沿用应用内错误显示。原生请求与解析测试不代替真实 Finder 点击验收；本机界面操作权限不可用时，应明确记录此验证范围。
 
 菜单功能参考本地 NanaZip 的命令表：打开归档、提取文件、提取到此处、提取到同名文件夹、测试、添加到归档，以及直接创建 ZIP／7z。邮箱、校验和及应用未实现的命令不展示。`MainWindow.RequestShellAction` 将请求排入线程安全队列，在 UI 上下文且没有后台操作、选择器、模态框或错误提示时处理；压缩合并所选源，其他命令按归档依次执行。普通添加预填创建对话框，直接 ZIP／7z 命令调用真实文件服务，提取与测试共用现有密码、进度、取消和错误流程。后端及无头 UI 测试不代替目标系统上的默认应用确认、Finder 扩展启用与 Explorer 菜单实机验收。
 

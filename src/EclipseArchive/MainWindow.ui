@@ -2,9 +2,9 @@
 @using EclipseUI
 @using EclipseUI.Elements
 
-<Window Title="EclipseArchive" Width="1000" Height="640">
+<Window Title={OperationOnly ? "EclipseArchive · " + DialogTitle : "EclipseArchive"} Width={OperationOnly ? 560 : 1000} Height={OperationOnly ? _panel == DialogKind.Create ? 620 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
     <ArchiveSurface Ref={RootGrid} Style="Background: theme(#1C2233, #F0F4F9)">
-        <ArchiveSurface IsEnabled={_panel == DialogKind.None && !_pickerBusy}>
+        <ArchiveSurface IsVisible={!OperationOnly} IsEnabled={_panel == DialogKind.None && !_pickerBusy && !_busy}>
             <ArchiveSurface IsVisible={!_showBrowser}>
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Gap="22" MaxWidth="560" Margin="24">
                     <ArchiveWelcomeIcon HorizontalAlignment="Center" />
@@ -91,8 +91,8 @@
             <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
             <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
         </ContextMenu>
-        <ArchiveSurface Ref={DialogOverlay} IsVisible={_panel != DialogKind.None} Style="Background: #00000066">
-            <ArchiveDialogBorder Ref={DialogFrame} IsEnabled={!_pickerBusy} MaxWidth={_panel == DialogKind.Options ? 680 : 560} MaxHeight={_panel == DialogKind.Options ? 560 : double.PositiveInfinity} Margin="16" HorizontalAlignment="Stretch" VerticalAlignment="Center" CornerRadius="8" BorderColor="#80808060" Style="Background: theme(#2C2C2C, #FAFAFA)">
+        <ArchiveSurface Ref={DialogOverlay} IsVisible={OperationOnly || _panel != DialogKind.None} Style="Background: #00000066">
+            <ArchiveDialogBorder Ref={DialogFrame} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : _panel == DialogKind.Options ? 680 : 560} MaxHeight={_panel == DialogKind.Options ? 560 : double.PositiveInfinity} Margin={OperationOnly ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderColor="#80808060" Style="Background: theme(#2C2C2C, #FAFAFA)">
                 <ArchiveSurface RowDefinitions="*,Auto">
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Padding="24" Gap="14">
@@ -223,6 +223,9 @@
                         @if (_panel == DialogKind.Progress) {
                             <ProgressBar Value={_progress} IsIndeterminate={_progress < 0} Height="8" />
                             <TextBlock FontSize="12" TextWrapping="Wrap">{_progressText}</TextBlock>
+                        }
+                        @if (OperationOnly && _panel == DialogKind.None && TaskIsRunning) {
+                            <ProgressBar IsIndeterminate="true" Height="8" />
                         }
                         @if (_dialogError.Length > 0) {
                             <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{_dialogError}</TextBlock>

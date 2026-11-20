@@ -15,6 +15,8 @@ public partial class MainWindow
     [UiParameter] public ArchiveEditService? EditService { get; set; }
     [UiParameter] public IDesktopServices Desktop { get; set; } = null!;
     [UiParameter] public string InitialPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    [UiParameter] public bool OperationOnly { get; set; }
+    public IArchiveOperationWindows? OperationWindows { get; set; }
 
     private Grid RootGrid = null!;
     private ArchiveSurface DialogOverlay = null!;
@@ -120,7 +122,7 @@ public partial class MainWindow
         DialogKind.AddToArchive => "添加到当前压缩包", DialogKind.DeleteEntries => "从压缩包删除", DialogKind.Rename => "重命名",
         DialogKind.Options => "设置",
         DialogKind.Message => _messageTitle,
-        _ => "",
+        _ => OperationOnly ? "正在准备…" : "",
     };
     private string DialogDescription => _panel switch
     {
@@ -135,7 +137,7 @@ public partial class MainWindow
         DialogKind.Rename => _editEntries.FirstOrDefault() ?? "",
         DialogKind.Options => "外观、文件格式关联和系统右键菜单。",
         DialogKind.Message => "",
-        _ => "",
+        _ => OperationOnly ? StatusMessage : "",
     };
     private bool IsArchiveEditDialog => Path.GetExtension(_operationArchive).Equals(".7z", StringComparison.OrdinalIgnoreCase) &&
         _panel is DialogKind.AddToArchive or DialogKind.DeleteEntries or DialogKind.Rename;
@@ -559,6 +561,7 @@ public partial class MainWindow
     private void CloseDialog()
     {
         if (_busy || _pickerBusy || _settingsBusy) return;
+        if (OperationOnly) { ArchiveWindowClose.Request(this); return; }
         _panel = DialogKind.None; _operationSucceeded = false; _resultPath = ""; _resultFolder = "";
         _password = ""; _passwordConfirm = ""; _dialogError = ""; Invalidate();
     }
@@ -608,29 +611,41 @@ public partial class MainWindow
                 _progress = report.TotalEntries == 0 ? 0 : report.CompletedEntries * 100d / report.TotalEntries;
                 _progressText = $"{report.CompletedEntries} / {report.TotalEntries}  ·  {report.EntryPath}"; Invalidate();
             });
-            var completed = await RunOperationAsync(async token =>
+            async Task Execute(IProgress<ArchiveOperationProgress> operationProgress, CancellationToken token)
             {
                 if (mode == DialogKind.Create) await FileService.CreateAsync(_sources, destination,
                     SelectedFormat, password,
-                    _formatIndex == 1 && _encryptNames, progress, token, createSettings);
+                    _formatIndex == 1 && _encryptNames, operationProgress, token, createSettings);
                 else if (mode == DialogKind.Extract)
                 {
-                    if (_shellExtractHere) await FileService.ExtractHereAsync(_operationArchive, destination, password, progress, token, extractSettings);
-                    else await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, progress, token, extractSettings);
+                    if (_shellExtractHere) await FileService.ExtractHereAsync(_operationArchive, destination, password, operationProgress, token, extractSettings);
+                    else await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, operationProgress, token, extractSettings);
                 }
-                else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, progress, token);
+                else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, operationProgress, token);
                 else if (mode == DialogKind.AddToArchive) await ArchiveEditor.AddAsync(_operationArchive, _sources, _replaceExisting,
-                    password, progress, token, archiveDirectory: _editDirectory);
-                else if (mode == DialogKind.DeleteEntries) await ArchiveEditor.DeleteAsync(_operationArchive, _editEntries, password, progress, token);
-                else if (mode == DialogKind.Rename) await RenameSelectedAsync(_newName, password, progress, token);
-            }, mode switch
+                    password, operationProgress, token, archiveDirectory: _editDirectory);
+                else if (mode == DialogKind.DeleteEntries) await ArchiveEditor.DeleteAsync(_operationArchive, _editEntries, password, operationProgress, token);
+                else if (mode == DialogKind.Rename) await RenameSelectedAsync(_newName, password, operationProgress, token);
+            }
+            var success = mode switch
             {
                 DialogKind.Test => "测试完成，所有文件均可读取。", DialogKind.Create => "压缩包创建完成。",
                 DialogKind.Extract => "提取完成。", DialogKind.AddToArchive => "压缩包已更新。",
                 DialogKind.DeleteEntries => "所选归档项目已删除。", _ => "重命名完成。",
-            }, mode, mode is DialogKind.Create or DialogKind.Extract ? destination : null,
-                mode == DialogKind.Create ? Path.GetDirectoryName(destination) : mode == DialogKind.Extract ? destination : null);
-            if (completed && mode == DialogKind.Extract && !_disposed)
+            };
+            var resultFolder = mode == DialogKind.Create ? Path.GetDirectoryName(destination) : mode == DialogKind.Extract ? destination : null;
+            var completed = !OperationOnly && OperationWindows is not null && mode is DialogKind.Create or DialogKind.Extract or DialogKind.AddToArchive
+                ? RunOperationWindow(new(mode == DialogKind.Extract ? "正在解压" : "正在压缩",
+                    mode == DialogKind.Create ? SourceSummary : OperationArchiveName, success,
+                    async (reporter, token) =>
+                    {
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
+                        await _operations.RunAsync(inner => Execute(reporter, inner), linked.Token).ConfigureAwait(false);
+                    }, mode == DialogKind.AddToArchive ? _operationArchive : destination,
+                    mode == DialogKind.AddToArchive ? Path.GetDirectoryName(_operationArchive) : resultFolder), mode)
+                : await RunOperationAsync(token => Execute(progress, token), success, mode,
+                    mode is DialogKind.Create or DialogKind.Extract ? destination : null, resultFolder);
+            if (completed && mode == DialogKind.Extract && !_disposed && !OperationOnly && OperationWindows is null)
             {
                 try { Desktop.Open(destination); }
                 catch (Exception error)
@@ -656,6 +671,28 @@ public partial class MainWindow
         }
     }
     private string? PasswordOrNull => string.IsNullOrEmpty(_password) ? null : _password;
+
+    private bool RunOperationWindow(ArchiveOperationSpec operation, DialogKind returnPanel)
+    {
+        _busy = true; _panel = DialogKind.None; _dialogError = ""; _error = "";
+        _password = ""; _passwordConfirm = ""; Invalidate();
+        try
+        {
+            var result = OperationWindows!.Show(operation);
+            if (_disposed) return false;
+            if (result.Succeeded) { StatusMessage = operation.SuccessMessage; return true; }
+            if (result.Cancelled) { StatusMessage = "操作已取消"; return false; }
+            _panel = returnPanel;
+            _dialogError = result.Error ?? "操作未完成，请重试。";
+            return false;
+        }
+        catch (Exception error)
+        {
+            if (!_disposed) { _panel = returnPanel; _dialogError = FriendlyError(error); }
+            return false;
+        }
+        finally { _busy = false; if (!_disposed) Invalidate(); }
+    }
 
     private async Task<bool> RunOperationAsync(Func<CancellationToken, Task> action, string success, DialogKind returnPanel = DialogKind.None,
         string? resultPath = null, string? resultFolder = null)
@@ -760,7 +797,13 @@ public partial class MainWindow
     }
     private static string FriendlyError(Exception error) => error is SharpCompress.Common.CryptographicException
         ? "密码不正确，或压缩包的加密数据已损坏。" : error.Message;
-    private void ReportError(Exception error) { if (!_disposed) { _error = FriendlyError(error); Invalidate(); } }
+    private void ReportError(Exception error)
+    {
+        if (_disposed) return;
+        _error = FriendlyError(error);
+        if (OperationOnly) { _messageTitle = "无法执行操作"; _messageBody = _error; _panel = DialogKind.Message; }
+        Invalidate();
+    }
     protected override void OnDispose()
     {
         _disposed = true; _operationCancellation?.Cancel(); _lifetime.Cancel();
