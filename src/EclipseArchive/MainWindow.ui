@@ -2,13 +2,13 @@
 @using EclipseUI
 @using EclipseUI.Elements
 
-<Window Title={OperationOnly ? "EclipseArchive · " + DialogTitle : "EclipseArchive"} Width={OperationOnly ? 560 : 1000} Height={OperationOnly ? _panel == DialogKind.Create ? 620 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
+<Window Title={OperationOnly ? "BubuZip · " + DialogTitle : "BubuZip"} Width={OperationOnly ? 560 : 1000} Height={OperationOnly ? _panel == DialogKind.Create ? 620 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
     <ArchiveSurface Ref={RootGrid} Style="Background: theme(#1C2233, #F0F4F9)">
         <ArchiveSurface IsVisible={!OperationOnly} IsEnabled={_panel == DialogKind.None && !_pickerBusy && !_busy}>
             <ArchiveSurface IsVisible={!_showBrowser}>
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Gap="22" MaxWidth="560" Margin="24">
                     <ArchiveWelcomeIcon HorizontalAlignment="Center" />
-                    <TextBlock FontSize="30" HorizontalAlignment="Center">EclipseArchive</TextBlock>
+                    <TextBlock FontSize="30" HorizontalAlignment="Center">BubuZip</TextBlock>
                     <TextBlock FontSize="14" HorizontalAlignment="Center" Style="Foreground: theme(#FFFFFFB8, #00000099)">轻松创建和打开压缩包</TextBlock>
                     <WrapPanel Gap="16" HorizontalAlignment="Center">
                         <Button Ref={HomeCreateButton} Width="200" Height="52" OnClick={PrepareCreate} IsEnabled={!_busy}>新建压缩</Button>
@@ -116,7 +116,7 @@
                                         <TextBlock FontSize="17">文件格式关联</TextBlock>
                                         <Button Grid.Column="1" OnClick={RefreshSystemIntegration}>刷新状态</Button>
                                     </ArchiveSurface>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">选择要用 EclipseArchive 打开的压缩格式。系统要求确认时，请在打开的设置窗口完成选择，再刷新状态。</TextBlock>
+                                    <TextBlock FontSize="12" TextWrapping="Wrap">选择要用 BubuZip 打开的压缩格式。系统要求确认时，请在打开的设置窗口完成选择，再刷新状态。</TextBlock>
                                     <ArchiveAssociationFormatSelector Ref={_associationSelector} Choices={_associationFormats} SelectionChanged={AssociationFormatsChanged} />
                                     <WrapPanel Gap="8">
                                         <Button OnClick={SelectAllAssociationFormats}>全选</Button>
@@ -131,7 +131,7 @@
                                         <Button OnClick={RegisterSystemMenu}>注册右键菜单</Button>
                                         <Button OnClick={UnregisterSystemMenu} IsEnabled={_integrationStatus?.MenuInstalled == true}>移除右键菜单</Button>
                                     </WrapPanel>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">EclipseArchive 子菜单提供打开压缩包、提取、测试和创建 ZIP／7z；可用命令随选中的文件变化。</TextBlock>
+                                    <TextBlock FontSize="12" TextWrapping="Wrap">BubuZip 子菜单提供打开压缩包、提取、测试和创建 ZIP／7z；可用命令随选中的文件变化。</TextBlock>
                                 </StackPanel>
                                 @if (_settingsBusy) {
                                     <TextBlock FontSize="12">正在处理系统设置…</TextBlock>

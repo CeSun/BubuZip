@@ -342,7 +342,7 @@ public partial class MainWindow
         ActivePane.FileScroll.ScrollToHorizontalOffset(0);
         ActivePane.FileScroll.ScrollToVerticalOffset(0);
         AddressBox.Text = snapshot.DisplayPath;
-        Title = "EclipseArchive — " + (snapshot.ArchivePath is { } archive && _nestedArchives.TryGetValue(archive, out var nested) ? nested.Name : Path.GetFileName(snapshot.ArchivePath));
+        Title = "BubuZip — " + (snapshot.ArchivePath is { } archive && _nestedArchives.TryGetValue(archive, out var nested) ? nested.Name : Path.GetFileName(snapshot.ArchivePath));
         UpdateRows();
         StatusMessage = $"{snapshot.Items.Count(item => item.IsDirectory)} 个文件夹，{snapshot.Items.Count(item => !item.IsDirectory)} 个文件 · {BrowserItem.FormatSize(snapshot.Items.Where(item => !item.IsDirectory).Sum(item => item.Size))}" + (InNestedArchive ? " · 嵌套压缩包只读" : "");
         Invalidate();
@@ -754,7 +754,7 @@ public partial class MainWindow
         var rows = SelectedRows; if (rows.Length == 0) return;
         ShowMessageDialog("属性", string.Join("\n\n", rows.Take(8).Select(row => $"{row.Name}\n类型：{row.TypeLabel}\n大小：{row.SizeLabel}\n修改时间：{row.ModifiedLabel}\n位置：{row.Path}")));
     }
-    private void ShowAbout() => ShowMessageDialog("关于 EclipseArchive", "基于 EclipseUI 的桌面压缩解压工具。\n\n操作：双击或 Enter 打开，Ctrl/⌘+O 打开压缩包，Ctrl/⌘+A 全选，Ctrl/⌘+R 刷新，F2 重命名。\n\n支持 ZIP / 7z 创建、修改，以及归档浏览、提取和测试。");
+    private void ShowAbout() => ShowMessageDialog("关于 BubuZip", "基于 EclipseUI 的桌面压缩解压工具。\n\n操作：双击或 Enter 打开，Ctrl/⌘+O 打开压缩包，Ctrl/⌘+A 全选，Ctrl/⌘+R 刷新，F2 重命名。\n\n支持 ZIP / 7z 创建、修改，以及归档浏览、提取和测试。");
     private void ShowMessageDialog(string title, string message)
     {
         _messageTitle = title; _messageBody = message; _dialogError = "";

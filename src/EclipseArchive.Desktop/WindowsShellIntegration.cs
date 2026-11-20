@@ -59,14 +59,14 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
             EnsurePublishExecutable();
             var selected = ValidateExtensions(extensions);
             var program = Classes + ProgId;
-            _registry.SetString(program, "", "EclipseArchive 压缩文件");
+            _registry.SetString(program, "", "BubuZip 压缩文件");
             _registry.SetString(program, OwnerValue, _executable);
             // Register as a candidate without silently taking over another application's defaults.
             _registry.SetString(program, "AllowSilentDefaultTakeOver", "");
             _registry.SetString(program + @"\DefaultIcon", "", Icon(_executable));
             _registry.SetString(program + @"\shell\open", "MultiSelectModel", "Document");
             _registry.SetString(program + @"\shell\open\command", "", OpenCommand(_executable));
-            _registry.SetString(Capabilities, "ApplicationName", "EclipseArchive");
+            _registry.SetString(Capabilities, "ApplicationName", "BubuZip");
             _registry.SetString(Capabilities, "ApplicationDescription", "浏览、创建、提取和测试压缩文件。");
             _registry.SetString(Capabilities, "ApplicationIcon", Icon(_executable));
             foreach (var extension in selected)
@@ -77,7 +77,7 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
             _registry.SetString(RegisteredApplications, "EclipseArchive", Capabilities);
             _notify();
             _openUri(DefaultAppsUri);
-            return new ShellIntegrationResult("已注册所选格式并打开 Windows 默认应用设置，请在那里确认使用 EclipseArchive。实际默认关联会在刷新后显示。");
+            return new ShellIntegrationResult("已注册所选格式并打开 Windows 默认应用设置，请在那里确认使用 BubuZip。实际默认关联会在刷新后显示。");
         }, cancellationToken);
 
     public Task<ShellIntegrationResult> RegisterMenuAsync(CancellationToken cancellationToken = default)
@@ -104,7 +104,7 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
     private void RegisterMenu(string path, bool includeArchiveCommands)
     {
         // The empty SubCommands value uses verbs nested beneath this menu, avoiding HKLM CommandStore.
-        _registry.SetString(path, "MUIVerb", "EclipseArchive");
+        _registry.SetString(path, "MUIVerb", "BubuZip");
         _registry.SetString(path, "Icon", Icon(_executable));
         _registry.SetString(path, "SubCommands", "");
         _registry.SetString(path, "MultiSelectModel", "Single");
@@ -153,7 +153,7 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
             !(_executable.StartsWith(@"\\", StringComparison.Ordinal) ||
               _executable.Length >= 3 && char.IsAsciiLetter(_executable[0]) && _executable[1] == ':' && _executable[2] == '\\') ||
             _checkExecutableExists && !File.Exists(_executable))
-            throw new InvalidOperationException("请先使用 Windows 发布版 EclipseArchive.exe 启动，再注册文件格式或资源管理器菜单；开发宿主不支持注册。");
+            throw new InvalidOperationException("请先使用 Windows 发布版 BubuZip.exe 启动，再注册文件格式或资源管理器菜单；开发宿主不支持注册。");
     }
 
     internal static string OpenCommand(string executable) => Quote(executable) + " -- \"%1\"";

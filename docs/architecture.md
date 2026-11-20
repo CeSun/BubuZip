@@ -1,6 +1,8 @@
 # 架构说明
 
-EclipseArchive 是独立的 .NET 10 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
+BubuZip 是独立的 .NET 10 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
+
+桌面可执行文件名为 `BubuZip`，macOS 包名为 `BubuZip.app`。源码工程、命名空间、`io.eclipsearchive.app` 等系统内部标识用于延续已有文件关联和访达扩展身份。
 
 应用首页提供新建压缩、打开压缩和设置入口。选择压缩包后显示归档内容，归档浏览、SharpCompress 流式引擎、磁盘文件工作流、系统集成与跨平台桌面服务相互独立。
 
@@ -28,7 +30,7 @@ EclipseArchive/
 
 `ArchivePane` 保存当前归档的浏览快照、密码、排序、历史与选择。`MainWindow.NavigateToAsync` 拒绝本地目录；上一级在归档根目录停止，切换归档时清空历史，路径栏为只读，返回首页清空当前归档。后台操作及模态对话框期间禁止切换操作目标。`ArchiveControls` 提供跨平台矢量图标、平面命令按钮、只读路径栏和列分隔线。
 
-归档浏览界面的参考来自相邻 NanaZip 仓库的 `NanaZip.Modern/MainWindowToolBarPage.xaml`、`StatusBarTemplate.xaml` 和 `Documents/MainWindowLightMode.png`、`MainWindowDarkMode.png`。应用保留 EclipseArchive 名称和现有 ZIP/7z 能力，标题栏和文件选择由宿主操作系统提供。性能测试使用内存中的 4 MiB 数据执行 ZIP 压缩、解压并校验，数值不等同于 NanaZip 的 LZMA 基准。
+归档浏览界面的参考来自相邻 NanaZip 仓库的 `NanaZip.Modern/MainWindowToolBarPage.xaml`、`StatusBarTemplate.xaml` 和 `Documents/MainWindowLightMode.png`、`MainWindowDarkMode.png`。应用保留 BubuZip 名称和现有 ZIP/7z 能力，标题栏和文件选择由宿主操作系统提供。性能测试使用内存中的 4 MiB 数据执行 ZIP 压缩、解压并校验，数值不等同于 NanaZip 的 LZMA 基准。
 
 `src/EclipseArchive.Desktop` 是可执行项目，根据系统装配 Win32、Linux SDL3 或 macOS 宿主，以及 Vello 渲染、HarfBuzz 文本、主题和桌面服务。`MacDesktopServices` 通过 AppKit/Objective-C 提供原生面板及废纸篓，Cocoa 调用保持在主线程；`WindowsDesktopServices` 使用 Windows PowerShell 的 WinForms 文件面板、Win32 信息框和 Shell 回收站；`LinuxDesktopServices` 使用 `zenity`、`gio` 和 `xdg-open`。Windows 和 Linux 的选择面板在后台等待，界面线程继续处理窗口消息，面板打开期间禁止重复操作；macOS 原生面板继续运行在 Cocoa 主线程。外部程序参数通过参数数组传递，用户路径不会交给 shell 解释。Linux 窗口使用 Vulkan；Windows 和 macOS 使用 Sparse 软件栅格及系统图形表面。
 
@@ -70,7 +72,7 @@ ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加�
 
 ## 设置与系统集成
 
-共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 EclipseArchive 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。主窗口的关闭、操作目标切换与请求队列遵循设置忙碌状态。
+共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 BubuZip 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。主窗口的关闭、操作目标切换与请求队列遵循设置忙碌状态。
 
 `ArchiveShellFormats.Extensions` 是跨平台支持格式目录，设置、系统注册和参数验证共用；macOS 包声明也保持相同范围。仅声明当前读取器支持的格式。`MacShellIntegration` 注册当前 `.app`，按包内文档类型设置默认角色处理程序，再读取系统结果；不写单文件 `com.apple.LaunchServices.OpenWith`，不清除下载隔离属性。对于已有单文件绑定与下载隔离组合引发的系统拦截，应用无法在未收到请求之前处理该提示，仍可通过应用内打开文件。
 
@@ -149,6 +151,6 @@ UI 在同步上下文中接收进度和操作结果，更新状态或显示可�
 
 开发时可使用 `brew install sdl3 harfbuzz` 安装依赖；构建原生访达扩展需要 Xcode 及其 macOS SDK。打包后的普通应用使用包内运行时，NativeAOT 应用不包含托管运行时，两者均使用包内原生依赖，用户无需安装这些开发依赖。打包本身不注册系统默认关联或启用扩展。
 
-默认输出为 `out/macos/EclipseArchive.app`，最低系统版本为 macOS 13。支持 `osx-arm64` 和 `osx-x64` 两种独立构建；各自需要匹配架构的原生库并单独验收。
+默认输出为 `out/macos/BubuZip.app`，最低系统版本为 macOS 13。支持 `osx-arm64` 和 `osx-x64` 两种独立构建；各自需要匹配架构的原生库并单独验收。
 
 默认 ad hoc 签名用于本地运行验证。通过包装脚本透传 `--sign-identity` 可使用 Developer ID 签名，透传 `--notary-profile` 可使用已配置的钥匙串公证凭据执行上传、公证和装订。仓库不包含开发者证书或公证凭据。

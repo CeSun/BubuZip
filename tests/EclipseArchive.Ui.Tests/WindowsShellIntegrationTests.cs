@@ -5,7 +5,7 @@ namespace EclipseArchive.Ui.Tests;
 
 public sealed class WindowsShellIntegrationTests
 {
-    private const string Executable = @"C:\Program Files\Eclipse Archive\EclipseArchive.Desktop.exe";
+    private const string Executable = @"C:\Program Files\BubuZip\BubuZip.exe";
 
     [Fact]
     public async Task AssociationRegistersCandidatesAndOpensSettingsWithoutChangingProtectedDefaults()
@@ -21,6 +21,7 @@ public sealed class WindowsShellIntegrationTests
         var result = await service.AssociateAsync([".ZIP", ".7z", ".zip"]);
 
         Assert.Contains("确认", result.Message);
+        Assert.Contains("BubuZip", result.Message);
         Assert.Equal(WindowsShellIntegration.DefaultAppsUri, Assert.Single(opened));
         Assert.Equal(1, notifications);
         Assert.Equal("Other.Zip", registry.GetString(WindowsShellIntegration.Classes + ".zip", ""));
@@ -29,6 +30,8 @@ public sealed class WindowsShellIntegrationTests
         Assert.Equal(WindowsShellIntegration.ProgId, registry.GetString(WindowsShellIntegration.Capabilities + @"\FileAssociations", ".7z"));
         Assert.IsType<byte[]>(registry.Values[(WindowsShellIntegration.Classes + @".zip\OpenWithProgids", WindowsShellIntegration.ProgId)]);
         Assert.Equal(WindowsShellIntegration.Capabilities, registry.GetString(WindowsShellIntegration.RegisteredApplications, "EclipseArchive"));
+        Assert.Equal("BubuZip", registry.GetString(WindowsShellIntegration.Capabilities, "ApplicationName"));
+        Assert.Equal("BubuZip 压缩文件", registry.GetString(WindowsShellIntegration.Classes + WindowsShellIntegration.ProgId, ""));
         Assert.Equal('"' + Executable + "\" -- \"%1\"", registry.GetString(WindowsShellIntegration.Classes + WindowsShellIntegration.ProgId + @"\shell\open\command", ""));
         Assert.Empty((await service.GetStatusAsync()).AssociatedExtensions);
 
@@ -40,7 +43,7 @@ public sealed class WindowsShellIntegrationTests
     [Fact]
     public async Task ExplorerCommandsQuoteTheExecutableAndUseSingleSelectionWithoutACommandShell()
     {
-        const string specialPath = @"C:\Apps\Eclipse $ & Archive\EclipseArchive.Desktop.exe";
+        const string specialPath = @"C:\Apps\Bubu $ & Zip\BubuZip.exe";
         var registry = new MemoryRegistry();
         var service = new WindowsShellIntegration(specialPath, registry, _ => { }, () => { });
 
@@ -59,10 +62,38 @@ public sealed class WindowsShellIntegrationTests
         }
         Assert.Equal("Single", registry.GetString(WindowsShellIntegration.FileMenu, "MultiSelectModel"));
         Assert.Equal("Single", registry.GetString(WindowsShellIntegration.DirectoryMenu, "MultiSelectModel"));
+        Assert.Equal("BubuZip", registry.GetString(WindowsShellIntegration.FileMenu, "MUIVerb"));
+        Assert.Equal("BubuZip", registry.GetString(WindowsShellIntegration.DirectoryMenu, "MUIVerb"));
         var status = await service.GetStatusAsync();
         Assert.True(status.MenuInstalled);
         Assert.True(status.MenuEnabled);
         Assert.Contains("显示更多选项", status.MenuMessage);
+    }
+
+    [Fact]
+    public async Task RegisteringBubuZipAfterAnOlderInstallationRefreshesCommandsInTheExistingKeys()
+    {
+        var registry = new MemoryRegistry();
+        const string oldExecutable = @"C:\Program Files\Eclipse Archive\EclipseArchive.Desktop.exe";
+        var oldService = new WindowsShellIntegration(oldExecutable, registry, _ => { }, () => { });
+        await oldService.AssociateAsync([".zip"]);
+        await oldService.RegisterMenuAsync();
+        registry.Defaults[".zip"] = WindowsShellIntegration.ProgId;
+        var service = new WindowsShellIntegration(Executable, registry, _ => { }, () => { });
+
+        await service.AssociateAsync([".zip"]);
+        await service.RegisterMenuAsync();
+
+        Assert.Equal("EclipseArchive.Archive", WindowsShellIntegration.ProgId);
+        Assert.Equal("ms-settings:defaultapps?registeredAppUser=EclipseArchive", WindowsShellIntegration.DefaultAppsUri);
+        Assert.Equal(WindowsShellIntegration.Capabilities, registry.GetString(WindowsShellIntegration.RegisteredApplications, "EclipseArchive"));
+        Assert.Null(registry.GetString(WindowsShellIntegration.RegisteredApplications, "BubuZip"));
+        Assert.Equal(Executable, registry.GetString(WindowsShellIntegration.FileMenu, "EclipseArchiveExecutable"));
+        Assert.Equal(Executable, registry.GetString(WindowsShellIntegration.DirectoryMenu, "EclipseArchiveExecutable"));
+        Assert.All(registry.Values.Where(pair => pair.Key.Path.EndsWith(@"\command", StringComparison.Ordinal)),
+            command => Assert.StartsWith('"' + Executable + '"', Assert.IsType<string>(command.Value)));
+        Assert.Equal([".zip"], (await service.GetStatusAsync()).AssociatedExtensions);
+        Assert.True((await service.GetStatusAsync()).MenuInstalled);
     }
 
     [Fact]

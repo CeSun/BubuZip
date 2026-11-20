@@ -36,7 +36,7 @@ final class EclipseArchiveFinderSync: FIFinderSync {
         }
         guard !urls.isEmpty, urls.allSatisfy({ $0.isFileURL }) else { return menu }
 
-        let actions = NSMenu(title: "EclipseArchive")
+        let actions = NSMenu(title: "BubuZip")
         let allArchives = urls.allSatisfy {
             Self.archiveExtensions.contains($0.pathExtension.lowercased()) &&
                 (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == false
@@ -55,7 +55,7 @@ final class EclipseArchiveFinderSync: FIFinderSync {
         add("压缩为 7z", action: .compress7z, kind: menuKind, to: actions)
         add("压缩为 ZIP", action: .compressZip, kind: menuKind, to: actions)
 
-        let parent = NSMenuItem(title: "EclipseArchive", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: "BubuZip", action: nil, keyEquivalent: "")
         parent.submenu = actions
         menu.addItem(parent)
         return menu
@@ -74,7 +74,7 @@ final class EclipseArchiveFinderSync: FIFinderSync {
     }
 
     @objc private func invoke(_ item: NSMenuItem) {
-        NSLog("EclipseArchive Finder action received (tag=%ld)", item.tag)
+        NSLog("BubuZip Finder action received (tag=%ld)", item.tag)
         do {
             guard let command = FinderMenuCommand(tag: item.tag) else {
                 throw FinderRequestFailure.invalidSelection
@@ -92,10 +92,10 @@ final class EclipseArchiveFinderSync: FIFinderSync {
     }
 
     private static func reportFailure(_ error: Error) {
-        NSLog("EclipseArchive Finder action failed: %@", error.localizedDescription)
+        NSLog("BubuZip Finder action failed: %@", error.localizedDescription)
         DispatchQueue.main.async {
             let alert = NSAlert()
-            alert.messageText = "无法执行 EclipseArchive 菜单操作"
+            alert.messageText = "无法执行 BubuZip 菜单操作"
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
             alert.addButton(withTitle: "好")

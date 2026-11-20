@@ -17,9 +17,9 @@ spec.loader.exec_module(packaging)
 
 
 def options(root, **overrides):
-    values = dict(project=root / "Project with spaces/Archive.csproj", name="EclipseArchive",
-                  executable="EclipseArchive.Desktop", bundle_id="io.eclipsearchive.app", version="0.1.0",
-                  output=root / "EclipseArchive.app", configuration="Release", rid="osx-arm64",
+    values = dict(project=root / "Project with spaces/Archive.csproj", name="BubuZip",
+                  executable="BubuZip", bundle_id="io.eclipsearchive.app", version="0.1.0",
+                  output=root / "BubuZip.app", configuration="Release", rid="osx-arm64",
                   minimum_system_version="13.0", sign_identity="-", publish_dir=root / "publish",
                   library_dir=[], sdl_library=None, notary_profile=None, force=False, verify=None)
     values.update(overrides)

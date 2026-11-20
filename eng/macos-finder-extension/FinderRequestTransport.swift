@@ -66,7 +66,7 @@ enum FinderRequestFailure: LocalizedError {
         switch self {
         case .invalidSelection: return "请重新选择有效的文件或文件夹，单次最多选择 256 项。"
         case .unsupportedControlCharacters: return "路径含暂不支持的控制字符。"
-        case .missingApplication: return "未能定位 EclipseArchive.app，请重新安装完整应用包。"
+        case .missingApplication: return "未能定位 BubuZip.app，请重新安装完整应用包。"
         case .oversizedRequest: return "所选路径过多或过长，请减少单次选择的项目。"
         case .unsafeDirectory: return "无法安全创建访达菜单请求，请检查应用的数据目录权限。"
         case .writeFailed(let code): return "无法保存访达菜单请求（系统错误 \(code)）。"

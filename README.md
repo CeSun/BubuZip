@@ -1,10 +1,14 @@
-# EclipseArchive
+# BubuZip
 
 基于 EclipseUI 的桌面压缩解压应用，支持 Windows、Linux 和 macOS。
 
 启动页提供“新建压缩”“打开压缩”和“设置”入口。打开压缩包后，可以浏览其中的目录、提取内容、测试归档，以及修改受支持的 ZIP/7z；包内的压缩文件可继续逐层打开，浏览范围限定在归档内。设置中可切换外观、关联压缩文件格式，以及注册或移除系统文件管理器的右键菜单。
 
 压缩引擎固定引用 NuGet `SharpCompress 0.51.0-beta.174` 和 `SharpZipLib 1.4.2`，使用托管库完成压缩解压，无需安装命令行压缩工具或原生压缩库。EclipseUI 通过 Git submodule 单独维护。
+
+应用图标使用 NanaZip 正式版原图，由 Shomnipotence 设计；来源及 CC BY-ND 4.0 许可见 [图标说明](assets/icons/NOTICE.md)。macOS 应用包和 Windows 可执行文件均包含对应格式的图标。
+
+构建入口为 `EclipseArchive.slnx`，生成的应用与可执行文件名称为 `BubuZip`（Windows 为 `BubuZip.exe`）。
 
 ## 当前功能
 
@@ -13,7 +17,7 @@
 - 归档路径为只读；上一级、Backspace 和历史导航可在嵌套压缩包之间返回，在最外层归档根目录无法继续进入系统文件夹。返回首页会清除当前归档与导航历史。
 - 创建支持 ZIP、7z、TAR、TAR.GZ、TAR.BZ2、TAR.LZ、TAR.ZST，以及单文件 GZ、BZ2、LZ、ZST。ZIP/7z 可设置密码；ZIP 支持 AES-256 或 ZipCrypto（密码限 ASCII），7z 可加密文件名。
 - 读取支持 ZIP、7z、RAR、TAR 及 GZip/BZip2/XZ/LZip/Zstandard/LZW 包装的 TAR，单文件 GZ、BZ2、XZ、LZ、ZST、`.Z`，以及 SharpCompress 支持的 ARC、ARJ、ACE 子集。提取支持完整路径、相对于当前目录和不包含目录三种模式。
-- 压缩和解压成功后保留 100% 进度窗口，可确认关闭或打开输出文件夹。解压成功后仍会自动在系统文件管理器中打开输出目录，应用内继续停留在当前压缩包；失败或取消时不显示成功状态。
+- 压缩和解压成功后保留 100% 进度窗口，可确认关闭或主动打开输出文件夹，应用内继续停留在当前压缩包；失败或取消时不显示成功状态。
 - ZIP/7z 内部添加文件、删除条目和 F2 重命名；支持子目录添加、目录合并和明确选择后替换同名文件。
 - 后台操作、按条目更新的进度与取消；文件/文件夹选择、保存面板，以及信息和确认对话框。
 - 设置提供支持格式的全选与单独勾选、关联操作、系统实际状态刷新，以及访达／资源管理器菜单的注册和移除。系统确认步骤与平台支持范围见下文。
@@ -58,8 +62,8 @@ macOS 的 Homebrew 依赖用于开发运行和构建时收集原生库。`.app` 
 项目目前为本地独立仓库。创建远程仓库后，可将下面的占位地址替换为实际应用仓库地址：
 
 ```bash
-git clone --recurse-submodules <应用仓库地址> EclipseArchive
-cd EclipseArchive
+git clone --recurse-submodules <应用仓库地址> BubuZip
+cd BubuZip
 ```
 
 对于已有的本地检出，初始化并还原子模块：
@@ -89,7 +93,7 @@ dotnet run --project src/EclipseArchive.Desktop -- "/path/to/archive.zip"
 
 压缩和解压使用独立进度窗口，支持取消、查看结果和打开输出文件夹。从访达或资源管理器右键菜单执行操作时，只显示操作小窗口；需要选择参数或输入密码时也在小窗口内完成。
 
-macOS 对带下载隔离标记、且保存了单文件“始终使用此应用打开”设置的文件，可能在交给应用之前显示“Apple 无法验证此文件是否包含恶意软件”。Apple 已记录这一系统行为（[官方讨论](https://developer.apple.com/forums/thread/795994)）。此时可先启动 EclipseArchive，再通过“打开压缩”选择文件；应用不会自动删除下载隔离标记或更改系统安全设置。
+macOS 对带下载隔离标记、且保存了单文件“始终使用此应用打开”设置的文件，可能在交给应用之前显示“Apple 无法验证此文件是否包含恶意软件”。Apple 已记录这一系统行为（[官方讨论](https://developer.apple.com/forums/thread/795994)）。此时可先启动 BubuZip，再通过“打开压缩”选择文件；应用不会自动删除下载隔离标记或更改系统安全设置。
 
 指定新建压缩包时的初始建议目录：
 
@@ -125,15 +129,15 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r win-x64 --self-contained
 dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contained true -o out/linux-x64
 ```
 
-发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/EclipseArchive.Desktop`。Windows ARM64、Linux ARM64 的原生依赖需要在相应设备上单独验证。
+发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/BubuZip`。Windows ARM64、Linux ARM64 的原生依赖需要在相应设备上单独验证。
 
 ## 设置与系统右键菜单
 
 从首页点击“设置”，或在归档浏览界面的“更多 → 工具 → 设置…”进入。外观可选择跟随系统、浅色或深色。文件关联和右键菜单为独立操作，打开设置本身不会更改系统配置。
 
-在“文件格式关联”中选择需要的扩展名，点击“关联所选格式”；可全选或取消全选。状态只显示系统当前实际使用 EclipseArchive 的默认关联，注册支持或打开系统设置不会被计为关联成功。macOS 会注册应用声明的文档类型，再按类型请求默认打开程序；不写入单个文件的“始终使用此应用打开”设置。Windows 会为当前用户注册所选格式的打开能力，并进入系统“默认应用”页面，仍需用户在 Windows 中确认；应用不修改受保护的默认选择。完成系统确认后，点击“刷新状态”核对结果。Linux 暂不提供这些系统集成设置。
+在“文件格式关联”中选择需要的扩展名，点击“关联所选格式”；可全选或取消全选。状态只显示系统当前实际使用 BubuZip 的默认关联，注册支持或打开系统设置不会被计为关联成功。macOS 会注册应用声明的文档类型，再按类型请求默认打开程序；不写入单个文件的“始终使用此应用打开”设置。Windows 会为当前用户注册所选格式的打开能力，并进入系统“默认应用”页面，仍需用户在 Windows 中确认；应用不修改受保护的默认选择。完成系统确认后，点击“刷新状态”核对结果。Linux 暂不提供这些系统集成设置。
 
-“注册右键菜单”在系统文件管理器中提供一个 EclipseArchive 子菜单，功能参考 NanaZip，并只列出当前应用已实现的操作：
+“注册右键菜单”在系统文件管理器中提供一个 BubuZip 子菜单，功能参考 NanaZip，并只列出当前应用已实现的操作：
 
 | 命令 | 行为 |
 |---|---|
@@ -147,7 +151,7 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contain
 
 提取和测试类命令只针对归档显示，普通文件与文件夹提供压缩命令。快捷操作仍使用相同的后台进度、取消、密码输入和错误提示流程。
 
-macOS 应用包包含 `EclipseArchiveFinder.appex`。点击注册后会打开访达扩展管理页面，用户需要在系统设置中启用“EclipseArchive 菜单”；仅注册不等于已启用。启用后菜单作用于当前用户主目录和 `/Volumes` 下的磁盘，范围之外不显示。扩展通过系统文档打开事件把操作交给主程序，不依赖扩展启动参数；菜单操作各自打开一个应用窗口，也可在主程序运行时发起。临时请求仅从扩展的私有目录读取，校验后消费一次，过期或来源不符的请求不会执行。写入或启动失败会显示提示。点击“移除右键菜单”会停用扩展并移除其注册，保留应用包内的扩展，之后可重新注册。
+macOS 应用包包含 `EclipseArchiveFinder.appex`。点击注册后会打开访达扩展管理页面，用户需要在系统设置中启用“BubuZip 菜单”；仅注册不等于已启用。启用后菜单作用于当前用户主目录和 `/Volumes` 下的磁盘，范围之外不显示。扩展通过系统文档打开事件把操作交给主程序，不依赖扩展启动参数；菜单操作各自打开一个应用窗口，也可在主程序运行时发起。临时请求仅从扩展的私有目录读取，校验后消费一次，过期或来源不符的请求不会执行。写入或启动失败会显示提示。点击“移除右键菜单”会停用扩展并移除其注册，保留应用包内的扩展，之后可重新注册。
 
 Windows 使用当前用户的经典级联菜单，无需管理员权限。Windows 11 中请在“显示更多选项”中使用；当前只支持单个文件或文件夹，未实现现代一级菜单和多选合并。注册菜单必须从 Windows 发布版可执行文件启动，不能从 `dotnet` 开发宿主注册。移除菜单只删除本应用当前可执行文件拥有的菜单注册，不修改文件关联。
 
@@ -184,7 +188,7 @@ dotnet run --project src/EclipseArchive.Desktop -- --settings --shot out/setting
 ./eng/package-macos.sh
 ```
 
-默认生成 `out/macos/EclipseArchive.app`，按本机架构构建并使用本地 ad hoc 签名。最低系统版本为 macOS 13。该签名用于本地验证；对外分发可透传 Developer ID 与可选公证参数：
+默认生成 `out/macos/BubuZip.app`，按本机架构构建并使用本地 ad hoc 签名。最低系统版本为 macOS 13。该签名用于本地验证；对外分发可透传 Developer ID 与可选公证参数：
 
 ```bash
 ./eng/package-macos.sh \

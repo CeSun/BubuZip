@@ -25,8 +25,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$rid" in osx-arm64|osx-x64) ;; *) echo "Unsupported macOS RID: $rid" >&2; exit 2 ;; esac
-publish_dir="$project_root/out/nativeaot/$rid"
-output="$project_root/out/macos-nativeaot/$rid/EclipseArchive.app"
+publish_dir="$project_root/out/nativeaot/$rid/BubuZip"
+output="$project_root/out/macos-nativeaot/$rid/BubuZip.app"
 
 dotnet publish "$project_root/src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj" \
     -c "$configuration" -r "$rid" --self-contained true \

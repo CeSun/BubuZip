@@ -23,7 +23,7 @@ internal sealed class MacArchiveLifetime(MacOpenDocuments documents) : IApplicat
             // SDL's native window is born hidden. Creating it initializes Cocoa,
             // allowing the first Apple event to arrive without building/showing
             // the browser UI while the launch purpose is still unknown.
-            native = new MacOSWindow("EclipseArchive", 960, 640);
+            native = new MacOSWindow("BubuZip", 960, 640);
             while (!documents.HasDocuments && (!documents.IsLaunchCompleted || !documents.IsDefaultLaunch))
             {
                 if (!native.PumpMessages()) return 0;

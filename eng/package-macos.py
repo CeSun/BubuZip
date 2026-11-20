@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package EclipseArchive with archive document declarations and its Finder Sync extension."""
+"""Package BubuZip with archive document declarations and its Finder Sync extension."""
 import ctypes
 import importlib.util
 import json
@@ -17,6 +17,8 @@ FINDER_SOURCE = ROOT / "eng/macos-finder-extension"
 FINDER_NAME = "EclipseArchiveFinder.appex"
 FINDER_REQUEST_TYPE = "io.eclipsearchive.finder-request"
 FINDER_REQUEST_EXTENSION = "eclipsearchive-request"
+ICON_ASSETS = ROOT / "assets/icons"
+ICON_NAME = "NanaZip.icns"
 
 # Imported declarations advertise existing formats; EclipseArchive never claims to own them.
 # Standard identifiers match CoreServices. Aliases share one identifier and one declaration.
@@ -83,7 +85,7 @@ def bundle_metadata():
     # Finder sends this private document through Launch Services. It is not an
     # archive format or a URL command; the app validates the request's origin.
     metadata["CFBundleDocumentTypes"].append({
-        "CFBundleTypeName": "EclipseArchive Finder request",
+        "CFBundleTypeName": "BubuZip Finder request",
         "CFBundleTypeRole": "Viewer",
         "LSHandlerRank": "Alternate",
         "LSItemContentTypes": [FINDER_REQUEST_TYPE],
@@ -91,7 +93,7 @@ def bundle_metadata():
     })
     metadata["UTExportedTypeDeclarations"] = [{
         "UTTypeIdentifier": FINDER_REQUEST_TYPE,
-        "UTTypeDescription": "EclipseArchive Finder request",
+        "UTTypeDescription": "BubuZip Finder request",
         "UTTypeConformsTo": ["public.data"],
         "UTTypeTagSpecification": {"public.filename-extension": [FINDER_REQUEST_EXTENSION]},
     }]
@@ -99,10 +101,18 @@ def bundle_metadata():
 
 
 def configure_metadata(app, version, minimum_system_version):
+    resources = app / "Contents/Resources"
+    resources.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ICON_ASSETS / ICON_NAME, resources / ICON_NAME)
+    licenses = resources / "app/licenses/NanaZip"
+    licenses.mkdir(parents=True, exist_ok=True)
+    for filename in ("NOTICE.md", "NanaZip.License.md"):
+        shutil.copy2(ICON_ASSETS / filename, licenses / filename)
     info_path = app / "Contents/Info.plist"
     with info_path.open("rb") as stream:
         info = plistlib.load(stream)
     info.update(bundle_metadata())
+    info["CFBundleIconFile"] = ICON_NAME
     info["EclipseArchiveFinderExtensionIdentifier"] = info["CFBundleIdentifier"] + ".finder"
     with info_path.open("wb") as stream:
         plistlib.dump(info, stream)
@@ -123,6 +133,12 @@ def verify_metadata(app):
     for key, value in expected.items():
         if info.get(key) != value:
             raise ValueError(f"Bundle has missing or inconsistent document metadata: {key}")
+    icon_path = app / "Contents/Resources" / ICON_NAME
+    if info.get("CFBundleIconFile") != ICON_NAME or not icon_path.is_file():
+        raise ValueError("Bundle application icon is missing or not declared")
+    icon = icon_path.read_bytes()
+    if len(icon) <= 8 or icon[:4] != b"icns" or int.from_bytes(icon[4:8], "big") != len(icon):
+        raise ValueError("Bundle application icon is not a complete ICNS file")
     plugin_path = app / "Contents/PlugIns" / FINDER_NAME
     with (plugin_path / "Contents/Info.plist").open("rb") as stream:
         plugin = plistlib.load(stream)
@@ -246,8 +262,8 @@ def main(arguments=None):
     parser = upstream.parser()
     parser.description = __doc__
     parser.set_defaults(project=str(ROOT / "src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj"),
-                        name="EclipseArchive", executable="EclipseArchive.Desktop", bundle_id="io.eclipsearchive.app",
-                        version="0.1.0", output=ROOT / "out/macos/EclipseArchive.app")
+                        name="BubuZip", executable="BubuZip", bundle_id="io.eclipsearchive.app",
+                        version="0.1.0", output=ROOT / "out/macos/BubuZip.app")
     package(upstream, parser.parse_args(arguments))
 
 

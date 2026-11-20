@@ -14,7 +14,7 @@ internal sealed record DesktopCommandLineOptions(
 
 internal static class DesktopCommandLine
 {
-    internal const string Usage = "Usage: EclipseArchive.Desktop [--frames positive-number] [--path folder] [--shot image.png] [--dark] [--settings] [--shell open|extract|extract-here|extract-folder|test|compress|compress-7z|compress-zip] [--] [file ...]";
+    internal const string Usage = "Usage: BubuZip [--frames positive-number] [--path folder] [--shot image.png] [--dark] [--settings] [--shell open|extract|extract-here|extract-folder|test|compress|compress-7z|compress-zip] [--] [file ...]";
 
     internal static DesktopCommandLineOptions Parse(string[] arguments)
     {

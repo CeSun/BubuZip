@@ -30,6 +30,21 @@ public sealed class MacShellIntegrationTests
     }
 
     [Fact]
+    public async Task AssociationMessagesUseBubuZipWhileKeepingTheExistingBundleIdentifier()
+    {
+        using var fixture = new Fixture();
+
+        var result = await fixture.Service.AssociateAsync([".zip"]);
+        var status = await fixture.Service.GetStatusAsync();
+
+        Assert.Equal("io.eclipsearchive.app", fixture.Store.Defaults[".zip"]);
+        Assert.Equal("io.eclipsearchive.app.finder", MacShellIntegration.FinderIdentifier);
+        Assert.Contains("关联到 BubuZip", result.Message);
+        Assert.Contains("默认使用 BubuZip", status.AssociationMessage);
+        Assert.DoesNotContain("EclipseArchive", result.Message);
+    }
+
+    [Fact]
     public async Task RegisteringMenuPassesTheWholeBundlePathAndRequiresUserEnablement()
     {
         using var fixture = new Fixture();
@@ -40,6 +55,7 @@ public sealed class MacShellIntegrationTests
         Assert.Equal(["-a", fixture.PluginPath], command.Arguments);
         Assert.Equal(1, fixture.ManagementWindows);
         Assert.Contains("系统设置中启用", result.Message);
+        Assert.Contains("BubuZip 菜单", result.Message);
         Assert.DoesNotContain(fixture.Commands, call => call.Arguments.Contains("use"));
     }
 
@@ -132,7 +148,7 @@ public sealed class MacShellIntegrationTests
 
         public Fixture()
         {
-            BundlePath = Path.Combine(_root, "含 空格的应用.app");
+            BundlePath = Path.Combine(_root, "含 空格的 BubuZip.app");
             PluginPath = Path.Combine(BundlePath, "Contents", "PlugIns", "EclipseArchiveFinder.appex");
             Directory.CreateDirectory(PluginPath);
             File.WriteAllText(Path.Combine(BundlePath, "Contents", "Info.plist"), "test");

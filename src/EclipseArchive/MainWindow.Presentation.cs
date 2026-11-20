@@ -28,7 +28,7 @@ public partial class MainWindow
         if (ReferenceEquals(ActivePane, pane) || _busy || _panel != DialogKind.None) return;
         _activePane = pane;
         _lastClick = "";
-        Title = pane.Snapshot?.DisplayPath ?? "EclipseArchive";
+        Title = pane.Snapshot?.DisplayPath ?? "BubuZip";
         Invalidate();
     }
 
@@ -53,7 +53,7 @@ public partial class MainWindow
         RightPane.RefreshView();
         StatusMessage = "就绪";
         _error = "";
-        Title = "EclipseArchive";
+        Title = "BubuZip";
         Invalidate();
     }
     private void ShowMore() { MainMenu.Open(); }

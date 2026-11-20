@@ -6,8 +6,8 @@
     <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>EclipseArchive Finder</string>
-    <key>CFBundleDisplayName</key><string>EclipseArchive 菜单</string>
+    <key>CFBundleName</key><string>BubuZip Finder</string>
+    <key>CFBundleDisplayName</key><string>BubuZip 菜单</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>0.1.0</string>

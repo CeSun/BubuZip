@@ -33,7 +33,7 @@ public sealed class MacShellIntegration : IShellIntegrationService
         VerifyPlatform();
         cancellationToken.ThrowIfCancellationRequested();
         if (_bundlePath is null)
-            return new ShellIntegrationStatus([], false, false, "请从已安装的 EclipseArchive.app 打开设置。", "请使用包含访达扩展的 macOS 应用包。");
+            return new ShellIntegrationStatus([], false, false, "请从已安装的 BubuZip.app 打开设置。", "请使用包含访达扩展的 macOS 应用包。");
         var associated = new List<string>();
         string? associationError = null;
         foreach (var extension in ArchiveShellFormats.Extensions)
@@ -49,7 +49,7 @@ public sealed class MacShellIntegration : IShellIntegrationService
         var result = _run("/usr/bin/pluginkit", ["-m", "-v", "-i", FinderIdentifier]);
         var (installed, enabled) = ReadPluginStatus(result.Output, plugin);
         return new ShellIntegrationStatus(associated, installed, enabled,
-            associationError ?? $"当前有 {associated.Count} 种格式默认使用 EclipseArchive 打开。",
+            associationError ?? $"当前有 {associated.Count} 种格式默认使用 BubuZip 打开。",
             result.ExitCode != 0 ? $"无法读取访达扩展状态：{(string.IsNullOrWhiteSpace(result.Error) ? $"退出代码 {result.ExitCode}" : result.Error.Trim())}"
                 : !Directory.Exists(plugin) ? "安装包未包含访达扩展，请更新应用。" : enabled
                 ? "访达菜单已启用，作用于个人文件夹和 /Volumes 下的磁盘。"
@@ -79,7 +79,7 @@ public sealed class MacShellIntegration : IShellIntegrationService
                 else pending.Add(extension);
             }
             return new ShellIntegrationResult(pending.Count == 0
-                ? $"已将 {completed} 种格式关联到 EclipseArchive。"
+                ? $"已将 {completed} 种格式关联到 BubuZip。"
                 : $"已关联 {completed} 种格式；{string.Join("、", pending)} 尚未生效，请确认 macOS 的更改提示后刷新状态。");
         }, cancellationToken);
     }
@@ -89,7 +89,7 @@ public sealed class MacShellIntegration : IShellIntegrationService
         VerifyPlatform();
         var bundle = RequireBundle();
         var plugin = PluginPath(bundle);
-        if (!Directory.Exists(plugin)) throw new IOException("安装包未包含访达扩展，请重新发布并安装完整的 EclipseArchive.app。");
+        if (!Directory.Exists(plugin)) throw new IOException("安装包未包含访达扩展，请重新发布并安装完整的 BubuZip.app。");
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -99,7 +99,7 @@ public sealed class MacShellIntegration : IShellIntegrationService
         cancellationToken.ThrowIfCancellationRequested();
         // Preserve the caller's UI context for Apple's extension-management interface.
         _showManagement();
-        return new ShellIntegrationResult("访达扩展已注册。请在打开的系统设置中启用“EclipseArchive 菜单”；启用后返回并刷新状态。菜单适用于个人文件夹和 /Volumes 下的磁盘。");
+        return new ShellIntegrationResult("访达扩展已注册。请在打开的系统设置中启用“BubuZip 菜单”；启用后返回并刷新状态。菜单适用于个人文件夹和 /Volumes 下的磁盘。");
     }
 
     public Task<ShellIntegrationResult> UnregisterMenuAsync(CancellationToken cancellationToken = default) => Task.Run(() =>
@@ -114,7 +114,7 @@ public sealed class MacShellIntegration : IShellIntegrationService
         return new ShellIntegrationResult("访达菜单已停用并移除注册。应用包中的扩展文件会保留，之后可重新注册并启用。");
     }, cancellationToken);
 
-    private string RequireBundle() => _bundlePath ?? throw new IOException("请先安装 EclipseArchive.app，并从应用包打开设置。");
+    private string RequireBundle() => _bundlePath ?? throw new IOException("请先安装 BubuZip.app，并从应用包打开设置。");
     private void VerifyPlatform()
     {
         if (_verifyPlatform && !OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("此操作仅适用于 macOS。");
@@ -220,7 +220,7 @@ internal sealed class MacAssociationStore : IMacAssociationStore
         {
             var map = CFBundleGetValueForInfoDictionaryKey(bundle, mapKey);
             if (map == 0 || CFGetTypeID(map) != CFDictionaryGetTypeID())
-                throw new IOException("安装包缺少文件格式声明，请使用新版 EclipseArchive.app。");
+                throw new IOException("安装包缺少文件格式声明，请使用新版 BubuZip.app。");
             var type = CFDictionaryGetValue(map, extensionKey);
             if (type == 0 || CFGetTypeID(type) != CFStringGetTypeID())
                 throw new IOException($"安装包尚未声明 {extension}，请更新应用。");

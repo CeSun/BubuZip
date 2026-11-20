@@ -11,9 +11,9 @@ fi
 
 exec python3 "$project_root/eng/package-macos.py" \
     --project "$project_root/src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj" \
-    --name EclipseArchive \
-    --executable EclipseArchive.Desktop \
+    --name BubuZip \
+    --executable BubuZip \
     --bundle-id io.eclipsearchive.app \
     --version 0.1.0 \
-    --output "$project_root/out/macos/EclipseArchive.app" \
+    --output "$project_root/out/macos/BubuZip.app" \
     "$@"

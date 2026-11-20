@@ -32,7 +32,7 @@ if (options.ShotPath is not null)
 
 if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
 {
-    Console.Error.WriteLine("EclipseArchive supports Windows, Linux and macOS.");
+    Console.Error.WriteLine("BubuZip supports Windows, Linux and macOS.");
     return 1;
 }
 

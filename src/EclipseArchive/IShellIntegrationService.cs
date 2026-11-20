@@ -10,7 +10,7 @@ public interface IShellIntegrationService
     Task<ShellIntegrationResult> UnregisterMenuAsync(CancellationToken cancellationToken = default);
 }
 
-/// <param name="AssociatedExtensions">Formats whose current default application is EclipseArchive.</param>
+/// <param name="AssociatedExtensions">Formats whose current default application is BubuZip.</param>
 public sealed record ShellIntegrationStatus(
     IReadOnlyList<string> AssociatedExtensions,
     bool MenuInstalled,

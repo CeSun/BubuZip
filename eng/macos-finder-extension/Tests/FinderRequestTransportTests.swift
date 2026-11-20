@@ -49,7 +49,7 @@ struct FinderRequestTransportTests {
         try expectFailure("Missing selection must not launch anything.") { _ = try open.paths(selected: nil, targeted: folder) }
         try expectFailure("Non-file URLs must not become shell paths.") { _ = try open.paths(selected: [URL(string: "https://example.com")!], targeted: nil) }
 
-        let app = root.appendingPathComponent("含 空格的 EclipseArchive.app", isDirectory: true)
+        let app = root.appendingPathComponent("含 空格的 BubuZip.app", isDirectory: true)
         let contents = app.appendingPathComponent("Contents", isDirectory: true)
         let plugin = contents.appendingPathComponent("PlugIns/EclipseArchiveFinder.appex", isDirectory: true)
         try files.createDirectory(at: plugin, withIntermediateDirectories: true)
