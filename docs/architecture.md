@@ -2,7 +2,7 @@
 
 EclipseArchive 是独立的 .NET 10 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
 
-应用首页提供新建压缩和打开压缩两个入口。选择压缩包后显示归档内容，归档浏览、SharpCompress 流式引擎、磁盘文件工作流与跨平台桌面服务相互独立。
+应用首页提供新建压缩、打开压缩和设置入口。选择压缩包后显示归档内容，归档浏览、SharpCompress 流式引擎、磁盘文件工作流、系统集成与跨平台桌面服务相互独立。
 
 ## 当前工程
 
@@ -32,7 +32,7 @@ EclipseArchive/
 
 `src/EclipseArchive.Desktop` 是可执行项目，根据系统装配 Win32、Linux SDL3 或 macOS 宿主，以及 Vello 渲染、HarfBuzz 文本、主题和桌面服务。`MacDesktopServices` 通过 AppKit/Objective-C 提供原生面板及废纸篓，Cocoa 调用保持在主线程；`WindowsDesktopServices` 使用 Windows PowerShell 的 WinForms 文件面板、Win32 信息框和 Shell 回收站；`LinuxDesktopServices` 使用 `zenity`、`gio` 和 `xdg-open`。Windows 和 Linux 的选择面板在后台等待，界面线程继续处理窗口消息，面板打开期间禁止重复操作；macOS 原生面板继续运行在 Cocoa 主线程。外部程序参数通过参数数组传递，用户路径不会交给 shell 解释。Linux 窗口使用 Vulkan；Windows 和 macOS 使用 Sparse 软件栅格及系统图形表面。
 
-启动参数 `--path folder` 指定创建压缩包时的初始建议目录，不会浏览该目录；`--frames 3` 用于运行有限循环次数后退出；`--shot image.png` 导出离屏测试预览，不创建桌面窗口。
+启动参数接受归档文件路径；`--path folder` 指定创建压缩包时的初始建议目录，不会浏览该目录；`--frames 3` 用于运行有限循环次数后退出；`--shot image.png` 导出离屏测试预览，不创建桌面窗口；`--settings` 进入设置，可与离屏预览组合。`--shell` 携带系统菜单操作及路径，参数经类型校验后转为 `ArchiveShellRequest`。
 
 构建入口为 `dotnet build EclipseArchive.slnx`，运行入口为 `dotnet run --project src/EclipseArchive.Desktop`，测试命令为 `dotnet test EclipseArchive.slnx`。窗口启动检查与 Core 行为测试分别验证应用入口和压缩引擎。
 
@@ -65,6 +65,18 @@ git submodule update --init --recursive
 添加对话框选择源文件、目标路径以及 ZIP、7z、TAR、TAR.GZ、TAR.BZ2、TAR.LZ、TAR.ZST、GZ、BZ2、LZ 或 ZST；单文件流仅接受一个源文件。ZIP、7z 和 GZip 可选压缩级别，ZIP 支持 AES-256 和 ZipCrypto，7z 可加密文件名。提取支持所选条目、所选目录及整包内容，并可选择完整路径、相对于当前目录或不包含目录；测试逐条读取文件。操作在后台执行，进度按条目更新，用户可取消。创建或提取成功后进度窗口保留并显示 100% 和成功状态，可确认关闭或打开输出文件夹；创建时打开归档所在目录，提取时打开输出目录。提取成功提交后仍自动通过桌面服务打开输出目录；打开失败在成功窗口单独报告，可再次尝试，保留提取成功状态和当前归档位置。
 
 ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加密 ZIP 保持只读。添加保留源顶层名称，支持在当前归档子目录内添加；同名文件默认拒绝，只有勾选替换后才能覆盖。归档内“复制”转为提取所选内容。打开归档内文件会先提取副本交由系统默认应用处理，副本不会自动回写。
+
+## 设置与系统集成
+
+共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 EclipseArchive 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。主窗口的关闭、操作目标切换与请求队列遵循设置忙碌状态。
+
+`ArchiveShellFormats.Extensions` 是跨平台支持格式目录，设置、系统注册和参数验证共用；macOS 包声明也保持相同范围。仅声明当前读取器支持的格式。`MacShellIntegration` 注册当前 `.app`，按包内文档类型设置默认角色处理程序，再读取系统结果；不写单文件 `com.apple.LaunchServices.OpenWith`，不清除下载隔离属性。对于已有单文件绑定与下载隔离组合引发的系统拦截，应用无法在未收到请求之前处理该提示，仍可通过应用内打开文件。
+
+`WindowsShellIntegration` 仅在 HKCU 注册本应用 ProgID、Capabilities 和可用打开程序，再打开 Windows 默认应用页面让用户确认；不生成或覆盖受保护的 `UserChoice`。状态通过系统有效 ProgID 查询，区分候选注册与实际默认应用。菜单写在文件与目录的经典级联 shell verb 中，Windows 11 位于“显示更多选项”；当前采用单选模型，用户路径作为独立的引用参数传入可执行文件，卸载仅删除当前可执行文件拥有的菜单键。Windows 发布版之外的开发宿主不可注册。
+
+macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.app` 放入 `Contents/PlugIns/EclipseArchiveFinder.appex`。注册后必须由用户在系统扩展页面启用；扩展监控真实用户主目录与 `/Volumes`，菜单只在范围内显示。扩展读取当前 Finder 选择，根据文件类型生成 EclipseArchive 子菜单，通过 `NSWorkspace.OpenConfiguration` 的参数数组启动包含它的应用，每个菜单请求创建一个应用实例，避免已有进程忽略启动参数。普通 Finder 文件打开仍通过应用层 SDL 文件事件监听进入现有窗口。
+
+菜单功能参考本地 NanaZip 的命令表：打开归档、提取文件、提取到此处、提取到同名文件夹、测试、添加到归档，以及直接创建 ZIP／7z。邮箱、校验和及应用未实现的命令不展示。`MainWindow.RequestShellAction` 将请求排入线程安全队列，在 UI 上下文且没有后台操作、选择器、模态框或错误提示时处理；压缩合并所选源，其他命令按归档依次执行。普通添加预填创建对话框，直接 ZIP／7z 命令调用真实文件服务，提取与测试共用现有密码、进度、取消和错误流程。后端及无头 UI 测试不代替目标系统上的默认应用确认、Finder 扩展启用与 Explorer 菜单实机验收。
 
 ## Core 与压缩引擎
 
@@ -109,6 +121,8 @@ MacDesktopServices → IDesktopServices（定义于共享 UI）
 
 提取路径映射后再次检查冲突，展平后同名文件会被拒绝。创建与提取要求目标不存在，且目标父目录已存在。服务先写同级临时文件或目录，完整成功并再次检查取消状态后，再提交到最终目标；失败或取消时清理临时输出，不覆盖已有内容或合并已有目录。
 
+`ExtractHereAsync` 用于系统菜单的“提取到此处”，其目标为已有的归档父目录。它先在目标目录中的私有暂存目录完成普通提取，再对所有待提交顶层文件与文件夹执行名称冲突和链接预检；存在任意冲突则不发布任何项目，也不合并目录。提交按顶层项移动，过程中失败会撤回本次已移动的项目；若撤回本身失败，保留暂存数据并报告位置，避免错误清理损失内容。取消与读取失败清理暂存输出，用户已有项目保持原样。
+
 在 macOS 等 Unix 平台，提取暂存目录在写入内容前设为 `0700`，提交后的目标根目录保留该权限；归档编辑工作目录和打开归档内文件的副本目录也使用 `0700`，限制其他用户访问提取出的明文。
 
 文件预检拒绝源路径和目标路径中的符号链接、归档内链接、绝对或父级跳转路径、重复条目，以及大小写/Unicode 规范化后冲突的路径。权限不足等文件系统错误由操作结果报告。
@@ -125,9 +139,9 @@ UI 在同步上下文中接收进度和操作结果，更新状态或显示可�
 
 ## macOS 发布
 
-应用通过 `./eng/package-macos.sh` 调用子模块内的打包器，并传入本应用的项目路径、名称、可执行文件名和输出位置。打包器将自包含发布产物、SDL3、HarfBuzz 及原生依赖组装到 `.app`，校验依赖架构并执行签名。
+应用通过 `./eng/package-macos.sh` 复用子模块内的打包能力，并传入本应用的项目路径、名称、可执行文件名和输出位置。打包流程将自包含或 NativeAOT 发布产物、SDL3、HarfBuzz 及原生依赖组装到 `.app`，补齐文档类型声明并构建 Finder Sync 扩展，校验依赖架构，按嵌套顺序执行签名，然后进行可选公证。扩展在最终应用签名和公证之前收入包内，不通过修改已签名安装包来补装。
 
-开发时可使用 `brew install sdl3 harfbuzz` 安装依赖。打包后的应用使用包内运行时和原生依赖，用户无需安装这些开发依赖。
+开发时可使用 `brew install sdl3 harfbuzz` 安装依赖；构建原生访达扩展需要 Xcode 及其 macOS SDK。打包后的普通应用使用包内运行时，NativeAOT 应用不包含托管运行时，两者均使用包内原生依赖，用户无需安装这些开发依赖。打包本身不注册系统默认关联或启用扩展。
 
 默认输出为 `out/macos/EclipseArchive.app`，最低系统版本为 macOS 13。支持 `osx-arm64` 和 `osx-x64` 两种独立构建；各自需要匹配架构的原生库并单独验收。
 

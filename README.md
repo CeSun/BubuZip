@@ -2,7 +2,7 @@
 
 基于 EclipseUI 的桌面压缩解压应用，支持 Windows、Linux 和 macOS。
 
-启动页提供“新建压缩”和“打开压缩”两个入口。打开压缩包后，可以浏览其中的目录、提取内容、测试归档，以及修改受支持的 ZIP/7z；包内的压缩文件可继续逐层打开，浏览范围限定在归档内。界面支持跟随系统、浅色和深色模式。
+启动页提供“新建压缩”“打开压缩”和“设置”入口。打开压缩包后，可以浏览其中的目录、提取内容、测试归档，以及修改受支持的 ZIP/7z；包内的压缩文件可继续逐层打开，浏览范围限定在归档内。设置中可切换外观、关联压缩文件格式，以及注册或移除系统文件管理器的右键菜单。
 
 压缩引擎固定引用 NuGet `SharpCompress 0.51.0-beta.174` 和 `SharpZipLib 1.4.2`，使用托管库完成压缩解压，无需安装命令行压缩工具或原生压缩库。EclipseUI 通过 Git submodule 单独维护。
 
@@ -16,6 +16,7 @@
 - 压缩和解压成功后保留 100% 进度窗口，可确认关闭或打开输出文件夹。解压成功后仍会自动在系统文件管理器中打开输出目录，应用内继续停留在当前压缩包；失败或取消时不显示成功状态。
 - ZIP/7z 内部添加文件、删除条目和 F2 重命名；支持子目录添加、目录合并和明确选择后替换同名文件。
 - 后台操作、按条目更新的进度与取消；文件/文件夹选择、保存面板，以及信息和确认对话框。
+- 设置提供支持格式的全选与单独勾选、关联操作、系统实际状态刷新，以及访达／资源管理器菜单的注册和移除。系统确认步骤与平台支持范围见下文。
 
 单文件 GZ、BZ2、LZ、ZST 创建只能选择一个文件；文件夹或多个文件请使用对应的 TAR 组合格式。单文件格式可能根据压缩包文件名恢复条目名；GZ 的非 ASCII 名称也采用此方式，重命名压缩包会影响恢复的文件名。TAR.XZ 和 TAR.Z 仅支持读取。当前工作流不支持多卷归档；ACE 仅支持未压缩条目，ARC/ARJ 的可用压缩方法受 SharpCompress 限制，部分 ARC 条目的大小可能显示为零。
 
@@ -27,7 +28,7 @@ ZIP 修改保留条目的原始属性与创建平台标识，包含 Unix 执行�
 
 打开归档内文件时先提取副本，再交给系统默认应用；编辑这个副本不会自动回写。归档内“复制”进入所选内容提取流程，“移动”暂不提供。
 
-压缩和提取目标必须是新路径，不覆盖已有文件或合并已有目录。`ArchiveFileService` 先写临时输出，成功后再提交到目标；失败或取消时清理临时输出。文件工作流拒绝符号链接、不安全路径以及冲突的归档路径。
+常规压缩和提取目标必须是新路径，不覆盖已有文件或合并已有目录。系统菜单的“提取到此处”允许使用压缩包所在的现有目录，但其中与归档内容同名的顶层文件或文件夹会使整次操作停止；不会覆盖或合并。`ArchiveFileService` 先写临时输出，预检并完整提取成功后再提交；失败或取消时清理临时输出。文件工作流拒绝符号链接、不安全路径以及冲突的归档路径。
 
 macOS 和 Linux 上的解压暂存目录、归档编辑工作目录及打开文件的副本目录仅允许当前用户访问（`0700`）。解压完成后的目标根目录保留这一权限。
 
@@ -48,7 +49,7 @@ Windows 和 macOS 使用 Vello Sparse 在 CPU 上绘制画面，再由 Direct3D 
   brew install sdl3 harfbuzz
   ```
 
-- macOS 生成 `.app` 需要 Xcode Command Line Tools。
+- macOS 生成包含访达扩展的 `.app` 需要安装 Xcode，并通过 `xcode-select` 选用对应的开发目录。
 
 macOS 的 Homebrew 依赖用于开发运行和构建时收集原生库。`.app` 打包流程会将 SDL3、HarfBuzz 及所需原生依赖收入应用，并包含自包含 .NET 运行时；分发后的 macOS 应用不要求安装 Homebrew 或 .NET SDK。Windows/Linux 的文件选择器一次选择一组文件或一个文件夹；可在创建或添加对话框中多次选择，合并文件和文件夹，也可清空后重新选择。
 
@@ -77,6 +78,16 @@ EclipseUI 位于 `external/EclipseUI`，来源为 <https://github.com/CeSun/Ecli
 dotnet build EclipseArchive.slnx
 dotnet run --project src/EclipseArchive.Desktop
 ```
+
+启动时可传入压缩包路径，直接打开并浏览内容（包含空格的路径请加引号）：
+
+```bash
+dotnet run --project src/EclipseArchive.Desktop -- "/path/to/archive.zip"
+```
+
+支持在 Finder 或 Windows 资源管理器的“打开方式”中手动选择应用。macOS 在应用已经运行时，也能接收新的打开请求；正在操作或显示对话框时，请求会等待当前流程结束。加密压缩包会提示输入密码，无法读取的文件会在应用内显示错误。应用不会在启动时自动接管文件关联；可在“设置”中主动关联所选格式。
+
+macOS 对带下载隔离标记、且保存了单文件“始终使用此应用打开”设置的文件，可能在交给应用之前显示“Apple 无法验证此文件是否包含恶意软件”。Apple 已记录这一系统行为（[官方讨论](https://developer.apple.com/forums/thread/795994)）。此时可先启动 EclipseArchive，再通过“打开压缩”选择文件；应用不会自动删除下载隔离标记或更改系统安全设置。
 
 指定新建压缩包时的初始建议目录：
 
@@ -114,6 +125,39 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contain
 
 发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/EclipseArchive.Desktop`。Windows ARM64、Linux ARM64 的原生依赖需要在相应设备上单独验证。
 
+## 设置与系统右键菜单
+
+从首页点击“设置”，或在归档浏览界面的“更多 → 工具 → 设置…”进入。外观可选择跟随系统、浅色或深色。文件关联和右键菜单为独立操作，打开设置本身不会更改系统配置。
+
+在“文件格式关联”中选择需要的扩展名，点击“关联所选格式”；可全选或取消全选。状态只显示系统当前实际使用 EclipseArchive 的默认关联，注册支持或打开系统设置不会被计为关联成功。macOS 会注册应用声明的文档类型，再按类型请求默认打开程序；不写入单个文件的“始终使用此应用打开”设置。Windows 会为当前用户注册所选格式的打开能力，并进入系统“默认应用”页面，仍需用户在 Windows 中确认；应用不修改受保护的默认选择。完成系统确认后，点击“刷新状态”核对结果。Linux 暂不提供这些系统集成设置。
+
+“注册右键菜单”在系统文件管理器中提供一个 EclipseArchive 子菜单，功能参考 NanaZip，并只列出当前应用已实现的操作：
+
+| 命令 | 行为 |
+|---|---|
+| 打开压缩包 | 在应用内浏览选中的归档 |
+| 提取文件… | 打开提取设置，允许选择新输出目录和密码 |
+| 提取到此处 | 直接提取到压缩包所在目录；先检查所有顶层项目的名称冲突，不覆盖或合并已有项目 |
+| 提取到同名文件夹 | 直接创建新文件夹；同名目录已存在时使用带序号的新名称 |
+| 测试压缩包 | 读取并校验归档内容，不输出提取文件 |
+| 添加到压缩包… | 将所选文件或文件夹预填到创建对话框，再选择格式、路径和密码 |
+| 压缩为同名 ZIP／7z 文件 | 直接创建真正的 ZIP／7z 归档；已有目标不覆盖，使用带序号的新名称 |
+
+提取和测试类命令只针对归档显示，普通文件与文件夹提供压缩命令。快捷操作仍使用相同的后台进度、取消、密码输入和错误提示流程。
+
+macOS 应用包包含 `EclipseArchiveFinder.appex`。点击注册后会打开访达扩展管理页面，用户需要在系统设置中启用“EclipseArchive 菜单”；仅注册不等于已启用。启用后菜单作用于当前用户主目录和 `/Volumes` 下的磁盘，范围之外不显示。菜单操作各自打开一个应用窗口，因此可以在主程序运行时发起其他操作。点击“移除右键菜单”会停用扩展并移除其注册，保留应用包内的扩展，之后可重新注册。
+
+Windows 使用当前用户的经典级联菜单，无需管理员权限。Windows 11 中请在“显示更多选项”中使用；当前只支持单个文件或文件夹，未实现现代一级菜单和多选合并。注册菜单必须从 Windows 发布版可执行文件启动，不能从 `dotnet` 开发宿主注册。移除菜单只删除本应用当前可执行文件拥有的菜单注册，不修改文件关联。
+
+设置页会区分“已注册”“等待系统确认”和“已启用”。系统关联和扩展启用需要在对应操作系统上验收，后端及界面测试不代替真实系统确认。应用不自动清除下载隔离标记或降低系统安全检查。
+
+可直接进入设置，或导出设置界面的离屏预览：
+
+```bash
+dotnet run --project src/EclipseArchive.Desktop -- --settings
+dotnet run --project src/EclipseArchive.Desktop -- --settings --shot out/settings.png
+```
+
 ## Core 流式接口
 
 `IArchiveEngine` 与实现 `SharpCompressArchiveEngine` 位于 `src/EclipseArchive.Core`，不依赖 UI 框架。
@@ -148,6 +192,8 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contain
 
 `--notary-profile` 使用预先配置的钥匙串凭据，并会上传应用进行公证。仅传 Developer ID 签名参数不会自动上传。
 
+常规打包和 `./eng/package-macos-nativeaot.sh` 的 NativeAOT 打包都包含文件类型声明与访达扩展；扩展在签名和可选公证之前收入应用包。打包不会更改本机文件关联或自动启用访达扩展。
+
 可分别构建 Apple Silicon 和 Intel 版本：
 
 ```bash
@@ -162,12 +208,13 @@ dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contain
 | 路径 | 用途 |
 |---|---|
 | `src/EclipseArchive.Core` | SharpCompress 流式引擎、磁盘文件工作流及进度模型，无 UI 依赖 |
-| `src/EclipseArchive` | 主窗口、文件列表、浏览服务和桌面服务接口 |
-| `src/EclipseArchive.Desktop` | 跨平台桌面入口、系统对话框、文件操作与离屏预览 |
+| `src/EclipseArchive` | 主窗口、文件列表、浏览服务、设置与桌面／系统集成接口 |
+| `src/EclipseArchive.Desktop` | 跨平台桌面入口、系统对话框、文件关联、系统菜单注册与离屏预览 |
 | `tests/EclipseArchive.Core.Tests` | 流式引擎与文件服务测试 |
 | `tests/EclipseArchive.Ui.Tests` | 文件浏览和主窗口交互测试 |
 | `external/EclipseUI` | 固定提交的 EclipseUI Git 子模块 |
 | `eng/package-macos.sh` | 复用 EclipseUI 打包器的应用入口 |
+| `eng/macos-finder-extension` | 原生 Finder Sync 扩展及构建配置 |
 | `docs/architecture.md` | 工程边界及后续扩展方式 |
 
 项目边界与数据流见 [架构说明](docs/architecture.md)。

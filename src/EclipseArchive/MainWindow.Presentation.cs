@@ -57,7 +57,6 @@ public partial class MainWindow
         Invalidate();
     }
     private void ShowMore() { MainMenu.Open(); }
-    private void ShowOptions() { _dialogError = ""; _panel = DialogKind.Options; Invalidate(); }
     private void ChooseTheme(int index)
     {
         _theme = index switch { 1 => ThemeVariant.Light, 2 => ThemeVariant.Dark, _ => ThemeVariant.System };

@@ -3,7 +3,12 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>EclipseArchive.Desktop</RootNamespace>
     <Description>EclipseArchive cross-platform desktop application.</Description>
+    <PublishAot Condition="'$(EclipseArchiveNativeAot)' == 'true'">true</PublishAot>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+    <IlcArg Include="--substitution:$(MSBuildThisFileDirectory)NativeAot.Substitutions.xml" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="EclipseArchive.Ui.Tests" />

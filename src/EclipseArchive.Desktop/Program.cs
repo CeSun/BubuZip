@@ -10,35 +10,23 @@ using EclipseUI.Text.Shaping;
 using EclipseUI.Themes.Fluent;
 using Microsoft.Extensions.DependencyInjection;
 
-if (args is ["--help"] or ["-h"])
+DesktopCommandLineOptions options;
+try { options = DesktopCommandLine.Parse(args); }
+catch (ArgumentException error)
 {
-    Console.WriteLine("Usage: EclipseArchive.Desktop [--frames positive-number] [--path folder] [--shot image.png] [--dark]");
+    Console.Error.WriteLine(error.Message);
+    Console.Error.WriteLine(DesktopCommandLine.Usage);
+    return 2;
+}
+if (options.ShowHelp)
+{
+    Console.WriteLine(DesktopCommandLine.Usage);
     return 0;
 }
 
-int? frameLimit = null;
-var initialPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-string? shotPath = null;
-var darkPreview = false;
-for (var index = 0; index < args.Length; index++)
+if (options.ShotPath is not null)
 {
-    if (args[index] == "--frames" && index + 1 < args.Length && int.TryParse(args[++index], out var frames) && frames > 0)
-        frameLimit = frames;
-    else if (args[index] == "--path" && index + 1 < args.Length)
-        initialPath = Path.GetFullPath(args[++index]);
-    else if (args[index] == "--shot" && index + 1 < args.Length)
-        shotPath = Path.GetFullPath(args[++index]);
-    else if (args[index] == "--dark") darkPreview = true;
-    else
-    {
-        Console.Error.WriteLine("Usage: EclipseArchive.Desktop [--frames positive-number] [--path folder] [--shot image.png] [--dark]");
-        return 2;
-    }
-}
-
-if (shotPath is not null)
-{
-    PreviewRenderer.Export(initialPath, shotPath, darkPreview);
+    PreviewRenderer.Export(options.InitialPath, options.ShotPath, options.DarkPreview, options.OpenSettings);
     return 0;
 }
 
@@ -54,12 +42,20 @@ var builder = AppBuilder.Configure<ArchiveApplication>()
     .UseFluentTheme(ThemeVariant.System)
     .ConfigureServices(services =>
     {
-        services.AddSingleton(new DesktopLaunchOptions(frameLimit, initialPath));
+        services.AddSingleton(new DesktopLaunchOptions(options.FrameLimit, options.InitialPath, options.ArchivePaths, options.ShellRequest, options.OpenSettings));
         services.AddSingleton<IArchiveEngine, SharpCompressArchiveEngine>();
         services.AddSingleton<ArchiveFileService>();
         services.AddSingleton<ArchiveEditService>();
-        if (OperatingSystem.IsMacOS()) services.AddSingleton<IDesktopServices, MacDesktopServices>();
-        else if (OperatingSystem.IsWindows()) services.AddSingleton<IDesktopServices, WindowsDesktopServices>();
+        if (OperatingSystem.IsMacOS())
+        {
+            services.AddSingleton<IDesktopServices, MacDesktopServices>();
+            services.AddSingleton<IShellIntegrationService, MacShellIntegration>();
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<IDesktopServices, WindowsDesktopServices>();
+            services.AddSingleton<IShellIntegrationService, WindowsShellIntegration>();
+        }
         else services.AddSingleton<IDesktopServices, LinuxDesktopServices>();
     });
 
@@ -67,4 +63,16 @@ if (OperatingSystem.IsMacOS()) builder.UseMacOS();
 else if (OperatingSystem.IsWindows()) builder.UseWindows();
 else builder.UseLinux();
 
-return builder.Start(args);
+var app = builder.Build();
+var window = (MainWindow)app.MainWindow!;
+using var openDocuments = OperatingSystem.IsMacOS()
+    ? new MacOpenDocuments(window.RequestOpenArchive)
+    : null;
+var exitCode = app.Services.GetRequiredService<IApplicationLifetime>().Run(app, args);
+if (options.FrameLimit is not null)
+{
+    Console.WriteLine($"archive: {window.CurrentLocation?.ArchivePath ?? "(none)"}");
+    Console.WriteLine($"archive entries: {window.VisibleItems.Count}");
+    Console.WriteLine($"status: {window.StatusMessage}");
+}
+return exitCode;

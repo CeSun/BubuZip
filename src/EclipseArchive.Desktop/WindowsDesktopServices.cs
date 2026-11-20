@@ -92,7 +92,7 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
         var result = DesktopProcess.Run(executable, ["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand", script], environment);
         if (result.ExitCode == 1 && string.IsNullOrWhiteSpace(result.Error)) return [];
         DesktopProcess.EnsureSuccess("文件选择", result);
-        return JsonSerializer.Deserialize<string[]>(result.Output) ?? [];
+        return JsonSerializer.Deserialize(result.Output, WindowsDialogJsonContext.Default.StringArray) ?? [];
     }
 
     public bool Confirm(string title, string message, string confirmLabel)

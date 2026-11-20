@@ -16,6 +16,132 @@ namespace EclipseArchive.Ui.Tests;
 public sealed class MainWindowTests
 {
     [Fact]
+    public void StartupOpenRequestOpensTheArchiveWithoutShowingAFilePicker()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip("打开 方式.zip", ("文档.txt", "content"));
+
+        fixture.OpenWindow(archive);
+        fixture.WaitForIdle();
+
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("文档.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        Assert.Equal(0, fixture.Desktop.ArchiveChoices);
+    }
+
+    [Fact]
+    public void RunningOpenRequestSwitchesArchivesAndResetsTheArchiveDirectory()
+    {
+        using var fixture = new WindowFixture();
+        var first = fixture.CreateZip("first.zip", ("docs/readme.txt", "first"));
+        var second = fixture.CreateZip("second.zip", ("second.txt", "second"));
+        fixture.OpenWindow(first);
+        fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        Assert.Equal("docs/", fixture.Window.CurrentLocation!.ArchivePrefix);
+
+        Task.Run(() => fixture.Window.RequestOpenArchive(second)).GetAwaiter().GetResult();
+        fixture.WaitForIdle();
+
+        Assert.Equal(second, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
+        Assert.Equal("second.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        Assert.Equal(0, fixture.Desktop.ArchiveChoices);
+    }
+
+    [Fact]
+    public void OpenRequestWaitsUntilTheCurrentModalDialogIsDismissed()
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("file.txt", "content"));
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+
+        fixture.Window.RequestOpenArchive(archive);
+        fixture.Host.UpdateLayout();
+
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.Contains("添加到压缩包", fixture.Texts());
+        fixture.Click("取消");
+        fixture.WaitForIdle();
+
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.DoesNotContain("添加到压缩包", fixture.Texts());
+    }
+
+    [Fact]
+    public void OpenRequestWaitsForAnActivePickerAndThenOpensTheRequestedArchive()
+    {
+        using var fixture = new WindowFixture();
+        var picked = fixture.CreateZip("picked.zip", ("picked.txt", "picked"));
+        var requested = fixture.CreateZip("requested.zip", ("requested.txt", "requested"));
+        fixture.Desktop.ArchiveChoice = picked;
+        fixture.Desktop.DialogGate = new();
+        fixture.OpenWindow();
+        fixture.Click("打开压缩");
+
+        fixture.Window.RequestOpenArchive(requested);
+        fixture.Host.UpdateLayout();
+
+        Assert.True(fixture.Window.TaskIsRunning);
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.Equal(0, fixture.Desktop.ArchiveChoices);
+        fixture.Desktop.DialogGate.SetResult(true);
+        fixture.WaitForIdle();
+
+        Assert.Equal(1, fixture.Desktop.ArchiveChoices);
+        Assert.Equal(requested, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("requested.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+    }
+
+    [Theory]
+    [InlineData("missing.zip", false)]
+    [InlineData("damaged.zip", true)]
+    [InlineData("unsupported.txt", true)]
+    public void InvalidOpenRequestShowsAnErrorAndContinuesAfterItIsDismissed(string name, bool createFile)
+    {
+        using var fixture = new WindowFixture();
+        var invalid = createFile ? fixture.WriteFile(name, "Not an archive.") : Path.Combine(fixture.DirectoryPath, name);
+        var valid = fixture.CreateZip(("recovered.txt", "content"));
+        fixture.OpenWindow(invalid, valid);
+        fixture.WaitForIdle();
+
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.Empty(fixture.Elements<PasswordBox>());
+        Assert.True(fixture.FindButton("关闭").IsEffectivelyVisible);
+        fixture.Host.UpdateLayout();
+        Assert.Null(fixture.Window.CurrentLocation);
+
+        fixture.Click("关闭");
+        fixture.WaitForIdle();
+
+        Assert.Equal(valid, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("recovered.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+    }
+
+    [Fact]
+    public void EncryptedOpenRequestPromptsForThePasswordAndCanBeOpened()
+    {
+        using var fixture = new WindowFixture();
+        const string password = "打开方式-中文密码!";
+        var archive = Path.Combine(fixture.DirectoryPath, "encrypted.7z");
+        File.WriteAllBytes(archive, ArchiveBytes(ArchiveFormat.SevenZip, "机密.txt", Encoding.UTF8.GetBytes("secret"), password, true));
+        fixture.OpenWindow(archive);
+        fixture.WaitForIdle();
+
+        Assert.Null(fixture.Window.CurrentLocation);
+        Assert.Contains("打开压缩包", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = password;
+        fixture.Click("打开");
+        fixture.WaitForIdle();
+
+        Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("机密.txt", Assert.Single(fixture.Window.VisibleItems).Name);
+        Assert.Empty(fixture.Elements<PasswordBox>());
+        Assert.Equal(0, fixture.Desktop.ArchiveChoices);
+    }
+
+    [Fact]
     public void ArchivePickerDoesNotBlockUiAndOpensTheSelectedArchive()
     {
         using var fixture = new WindowFixture();
@@ -63,7 +189,7 @@ public sealed class MainWindowTests
     }
 
     [Fact]
-    public void StartupShowsOnlyCreateAndOpenWithoutBrowsingLocalFiles()
+    public void StartupShowsCreateOpenAndSettingsWithoutBrowsingLocalFiles()
     {
         using var fixture = new WindowFixture();
         fixture.WriteFile("本地文件.txt", "not in an archive");
@@ -71,7 +197,7 @@ public sealed class MainWindowTests
         Assert.Null(fixture.Window.CurrentLocation);
         Assert.Empty(fixture.Window.VisibleItems);
         Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).IsEffectivelyVisible);
-        Assert.Equal(new[] { "新建压缩", "打开压缩" }, fixture.Elements<Button>()
+        Assert.Equal(new[] { "新建压缩", "打开压缩", "设置" }, fixture.Elements<Button>()
             .Where(button => button is not MenuItem && button.IsEffectivelyVisible)
             .Select(button => button.Label));
         fixture.Click("打开压缩");
@@ -861,7 +987,7 @@ public sealed class MainWindowTests
         public ListBox Files { get; private set; } = null!;
         public TextBox Address { get; private set; } = null!;
 
-        public void OpenWindow()
+        public void OpenWindow(params string[] requestPaths)
         {
             Window = new MainWindow
             {
@@ -870,6 +996,7 @@ public sealed class MainWindowTests
                 Desktop = Desktop,
                 InitialPath = DirectoryPath,
             };
+            foreach (var path in requestPaths) Window.RequestOpenArchive(path);
             Window.EnsureInitialized();
             Host = new HeadlessRoot(Window) { AvailableSize = new Size(1140, 740) };
             Host.Content.SetThemeDefaults(FluentTheme.Light);
@@ -949,9 +1076,11 @@ public sealed class MainWindowTests
             return path;
         }
 
-        public string CreateZip(params (string Path, string? Content)[] entries)
+        public string CreateZip(params (string Path, string? Content)[] entries) => CreateZip("导航测试.zip", entries);
+
+        public string CreateZip(string name, params (string Path, string? Content)[] entries)
         {
-            var path = Path.Combine(DirectoryPath, "导航测试.zip");
+            var path = Path.Combine(DirectoryPath, name);
             var inputs = entries.Select(entry => new ArchiveWriteEntry(entry.Path,
                 entry.Content is null ? null : new MemoryStream(Encoding.UTF8.GetBytes(entry.Content), writable: false)))
                 .ToArray();

@@ -100,7 +100,7 @@ public partial class MainWindow
     public string StatusMessage { get => ActivePane?.Status ?? "就绪"; private set => ActivePane.Status = value; }
     public IReadOnlyList<BrowserItem> VisibleItems { get => ActivePane.Rows; private set => ActivePane.Rows = value; }
     public BrowserSnapshot? CurrentLocation => _snapshot;
-    public bool TaskIsRunning => _busy || _pickerBusy;
+    public bool TaskIsRunning => _busy || _pickerBusy || _openingRequestedArchive || _settingsBusy;
     private BrowserItem[] SelectedRows => Files?.SelectedItems.OfType<BrowserItem>().ToArray() ?? [];
     private bool HasSelection => SelectedRows.Length > 0;
     private bool CanEditArchive => !_busy && !InNestedArchive && _snapshot?.ArchivePath is { } path &&
@@ -118,7 +118,7 @@ public partial class MainWindow
         DialogKind.Create => "添加到压缩包", DialogKind.Extract => "提取文件", DialogKind.Test => "测试压缩包",
         DialogKind.Unlock => "打开压缩包", DialogKind.EntryPassword => "打开加密文件", DialogKind.Progress => _operationSucceeded ? "操作成功" : "正在处理",
         DialogKind.AddToArchive => "添加到当前压缩包", DialogKind.DeleteEntries => "从压缩包删除", DialogKind.Rename => "重命名",
-        DialogKind.Options => "选项",
+        DialogKind.Options => "设置",
         DialogKind.Message => _messageTitle,
         _ => "",
     };
@@ -133,7 +133,7 @@ public partial class MainWindow
         DialogKind.AddToArchive => Path.GetFileName(_operationArchive) + "!/" + _editDirectory,
         DialogKind.DeleteEntries => $"将从 {Path.GetFileName(_operationArchive)} 中删除所选 {_editEntries.Length} 个项目及其内容。",
         DialogKind.Rename => _editEntries.FirstOrDefault() ?? "",
-        DialogKind.Options => "调整文件管理器的显示方式。",
+        DialogKind.Options => "外观、文件格式关联和系统右键菜单。",
         DialogKind.Message => "",
         _ => "",
     };
@@ -156,11 +156,14 @@ public partial class MainWindow
             RootGrid.Children.Add(new ToolTip { Target = command, Content = text });
         }
         RootGrid.AddHandler(Element.KeyDownEvent, HandleKey);
+        if (!_openRequests.IsEmpty || _showSettingsRequested) Invalidate();
     }
 
     protected override void OnUpdating()
     {
         base.OnUpdating();
+        ShowRequestedSettings();
+        OpenNextRequestedArchive();
         if (_presentedPanel == DialogKind.None && _panel != DialogKind.None)
             _focusBeforeDialog = FocusManager.GetFor(RootGrid)?.Focused;
     }
@@ -507,6 +510,7 @@ public partial class MainWindow
     private void PrepareExtract()
     {
         if (_busy) return;
+        _shellExtractHere = false;
         _operationArchive = _snapshot?.ArchivePath ?? SelectedRows.FirstOrDefault(row => row.IsArchive)?.Path ?? "";
         if (_operationArchive.Length == 0) return;
         _extractEntries = _snapshot?.ArchivePath is not null
@@ -542,7 +546,11 @@ public partial class MainWindow
                 var directory = Path.GetDirectoryName(_destination);
                 var folder = await ShowPickerAsync(() => Desktop.ChooseFolder(directory));
                 if (_disposed) return;
-                if (folder is not null) _destination = UniqueDestination(folder, ArchiveBaseName(OperationArchiveName), "");
+                if (folder is not null)
+                {
+                    _shellExtractHere = false;
+                    _destination = UniqueDestination(folder, ArchiveBaseName(OperationArchiveName), "");
+                }
             }
             Invalidate();
         }
@@ -550,7 +558,7 @@ public partial class MainWindow
     }
     private void CloseDialog()
     {
-        if (_busy || _pickerBusy) return;
+        if (_busy || _pickerBusy || _settingsBusy) return;
         _panel = DialogKind.None; _operationSucceeded = false; _resultPath = ""; _resultFolder = "";
         _password = ""; _passwordConfirm = ""; _dialogError = ""; Invalidate();
     }
@@ -605,7 +613,11 @@ public partial class MainWindow
                 if (mode == DialogKind.Create) await FileService.CreateAsync(_sources, destination,
                     SelectedFormat, password,
                     _formatIndex == 1 && _encryptNames, progress, token, createSettings);
-                else if (mode == DialogKind.Extract) await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, progress, token, extractSettings);
+                else if (mode == DialogKind.Extract)
+                {
+                    if (_shellExtractHere) await FileService.ExtractHereAsync(_operationArchive, destination, password, progress, token, extractSettings);
+                    else await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, progress, token, extractSettings);
+                }
                 else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, progress, token);
                 else if (mode == DialogKind.AddToArchive) await ArchiveEditor.AddAsync(_operationArchive, _sources, _replaceExisting,
                     password, progress, token, archiveDirectory: _editDirectory);

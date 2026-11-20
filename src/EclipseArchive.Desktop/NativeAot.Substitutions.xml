@@ -1,0 +1,24 @@
+<linker>
+  <!-- VelloSharp 0.5.0-alpha.3 calls Assembly.GetCallingAssembly during module
+       initialization, which NativeAOT does not support. Use the platform's normal
+       P/Invoke resolution instead: the packager places all dylibs beside the binary.
+       This applies only to the AOT executable, never to the NuGet cache or JIT build. -->
+  <assembly fullname="VelloSharp">
+    <type fullname="VelloSharp.NativeLibraryLoader">
+      <method signature="System.Void EnsureInitialized()" body="stub" />
+      <method signature="System.Void RegisterNativeLibraries(System.String[])" body="stub" />
+      <method signature="System.Void RegisterNativeLibrary(System.String)" body="stub" />
+      <method signature="System.Void RegisterProbingPath(System.String)" body="stub" />
+      <method signature="System.Void RegisterResolverForAssembly(System.Reflection.Assembly)" body="stub" />
+    </type>
+  </assembly>
+  <assembly fullname="VelloSharp.Gpu">
+    <type fullname="VelloSharp.NativeLibraryLoader">
+      <method signature="System.Void EnsureInitialized()" body="stub" />
+      <method signature="System.Void RegisterNativeLibraries(System.String[])" body="stub" />
+      <method signature="System.Void RegisterNativeLibrary(System.String)" body="stub" />
+      <method signature="System.Void RegisterProbingPath(System.String)" body="stub" />
+      <method signature="System.Void RegisterResolverForAssembly(System.Reflection.Assembly)" body="stub" />
+    </type>
+  </assembly>
+</linker>

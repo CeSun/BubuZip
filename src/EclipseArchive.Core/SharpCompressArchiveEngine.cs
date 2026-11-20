@@ -7,6 +7,7 @@ using SharpCompress.Writers.SevenZip;
 using SharpCompress.Writers.Zip;
 using SharpCompress.Compressors.LZMA;
 using ICSharpCode.SharpZipLib.Zip;
+using System.Text;
 
 namespace EclipseArchive.Core;
 
@@ -93,6 +94,7 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
                 {
                     UseZip64 = true,
                     LeaveStreamOpen = true,
+                    ArchiveEncoding = new ArchiveEncoding { Default = Encoding.UTF8 },
                     CompressionLevel = settings.CompressionLevel == ArchiveCompressionLevel.Store ? 0 : (int)settings.CompressionLevel,
                 };
             var archiveType = format == ArchiveFormat.SevenZip ? ArchiveType.SevenZip : ArchiveType.Zip;

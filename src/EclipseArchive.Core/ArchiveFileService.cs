@@ -3,7 +3,7 @@ using System.Text;
 namespace EclipseArchive.Core;
 
 /// <summary>Filesystem policy for archive operations. Outputs are committed only after success.</summary>
-public sealed class ArchiveFileService(IArchiveEngine engine)
+public sealed partial class ArchiveFileService(IArchiveEngine engine)
 {
     private readonly IArchiveEngine _engine = engine ?? throw new ArgumentNullException(nameof(engine));
 

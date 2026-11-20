@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
 using EclipseArchive.Core;
@@ -54,21 +55,54 @@ public sealed class SharpCompressArchiveEngineTests
         Assert.Empty(extractedEmptyContent.ToArray());
     }
 
-    [Fact]
-    public async Task CreatedZipCanBeReadByDotNetZipArchive()
+    [Theory]
+    [InlineData(ArchiveCompressionLevel.Store)]
+    [InlineData(ArchiveCompressionLevel.Normal)]
+    public async Task CreatedZipHasUtf8HeadersAndCanBeReadByOtherZipReaders(ArchiveCompressionLevel level)
     {
         using var content = new MemoryStream(FileContent);
+        using var emptyContent = new MemoryStream();
         using var archive = new MemoryStream();
-        await _engine.CreateAsync(archive, [new ArchiveWriteEntry(FileName, content)]);
+        const string unicodeName = "资料 with spaces/你好 📦.txt";
+        await ((IConfigurableArchiveEngine)_engine).CreateWithSettingsAsync(archive,
+        [
+            new ArchiveWriteEntry(unicodeName, content),
+            new ArchiveWriteEntry(EmptyFileName, emptyContent),
+            new ArchiveWriteEntry(EmptyDirectoryName, null),
+        ], ArchiveFormat.Zip, null, false, new ArchiveCreateSettings { CompressionLevel = level });
+
+        AssertZipUtf8Flags(archive.ToArray(), expectedEntries: 3);
 
         archive.Position = 0;
-        using var zip = new ZipArchive(archive, ZipArchiveMode.Read, leaveOpen: true);
-        var entry = Assert.Single(zip.Entries);
-        Assert.Equal(FileName, entry.FullName);
+        // An explicit legacy fallback catches missing UTF-8 flags; .NET's default UTF-8
+        // decoding would otherwise hide a malformed archive that other ZIP readers misread.
+        using var zip = new ZipArchive(archive, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: Encoding.Latin1);
+        Assert.Equal(new[] { unicodeName, EmptyFileName, EmptyDirectoryName }, zip.Entries.Select(entry => entry.FullName));
+        var entry = zip.GetEntry(unicodeName)!;
         using var entryStream = entry.Open();
         using var extracted = new MemoryStream();
         await entryStream.CopyToAsync(extracted);
         Assert.Equal(FileContent, extracted.ToArray());
+    }
+
+    private static void AssertZipUtf8Flags(byte[] archive, int expectedEntries)
+    {
+        uint UInt32(int offset) => BinaryPrimitives.ReadUInt32LittleEndian(archive.AsSpan(offset));
+        ushort UInt16(int offset) => BinaryPrimitives.ReadUInt16LittleEndian(archive.AsSpan(offset));
+        // This fixture has no archive comment and fits the ordinary EOCD fields even with ZIP64 enabled.
+        var end = archive.Length - 22;
+        Assert.Equal(0x06054b50u, UInt32(end));
+        Assert.Equal(expectedEntries, UInt16(end + 10));
+        var central = checked((int)UInt32(end + 16));
+        for (var index = 0; index < expectedEntries; index++)
+        {
+            Assert.Equal(0x02014b50u, UInt32(central));
+            Assert.Equal(1 << 11, UInt16(central + 8) & (1 << 11));
+            var local = checked((int)UInt32(central + 42));
+            Assert.Equal(0x04034b50u, UInt32(local));
+            Assert.Equal(1 << 11, UInt16(local + 6) & (1 << 11));
+            central += 46 + UInt16(central + 28) + UInt16(central + 30) + UInt16(central + 32);
+        }
     }
 
     [Theory]

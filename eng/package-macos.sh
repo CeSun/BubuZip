@@ -9,7 +9,7 @@ if [[ ! -f "$eclipse_root/eng/bundle_macos.py" ]]; then
     exit 1
 fi
 
-exec python3 "$eclipse_root/eng/bundle_macos.py" \
+exec python3 "$project_root/eng/package-macos.py" \
     --project "$project_root/src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj" \
     --name EclipseArchive \
     --executable EclipseArchive.Desktop \
