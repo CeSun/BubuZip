@@ -100,6 +100,7 @@ public sealed class ArchiveDialogBorder : Border
         c.FillRectangle(new Rect(-4, 3, bounds.Width + 8, bounds.Height + 8), new UiColor(0, 0, 0, 20), CornerRadius + 4);
         c.FillRectangle(bounds, c.Background, CornerRadius);
         var thickness = BorderThickness;
+        if (thickness <= 0) return;
         c.StrokeRectangle(new Rect(thickness / 2, thickness / 2,
             Math.Max(0, bounds.Width - thickness), Math.Max(0, bounds.Height - thickness)),
             BorderColor, thickness, Math.Max(0, CornerRadius - thickness / 2));
