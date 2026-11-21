@@ -97,12 +97,12 @@ public partial class MainWindow
     private double _progress = -1;
     private ThemeVariant _theme = ThemeVariant.System;
     private DialogKind _panel;
-    private enum DialogKind { None, Create, Extract, Test, Unlock, EntryPassword, Progress, AddToArchive, DeleteEntries, Rename, Options, Message }
+    private enum DialogKind { None, Create, Extract, Test, Unlock, EntryPassword, Progress, AddToArchive, DeleteEntries, Rename, Message }
 
     public string StatusMessage { get => ActivePane?.Status ?? "就绪"; private set => ActivePane.Status = value; }
     public IReadOnlyList<BrowserItem> VisibleItems { get => ActivePane.Rows; private set => ActivePane.Rows = value; }
     public BrowserSnapshot? CurrentLocation => _snapshot;
-    public bool TaskIsRunning => _busy || _pickerBusy || _openingRequestedArchive || _settingsBusy;
+    public bool TaskIsRunning => _busy || _pickerBusy || _openingRequestedArchive || _settingsWindowOpen;
     private BrowserItem[] SelectedRows => Files?.SelectedItems.OfType<BrowserItem>().ToArray() ?? [];
     private bool HasSelection => SelectedRows.Length > 0;
     private bool CanEditArchive => !_busy && !InNestedArchive && _snapshot?.ArchivePath is { } path &&
@@ -120,7 +120,6 @@ public partial class MainWindow
         DialogKind.Create => "添加到压缩包", DialogKind.Extract => "提取文件", DialogKind.Test => "测试压缩包",
         DialogKind.Unlock => "打开压缩包", DialogKind.EntryPassword => "打开加密文件", DialogKind.Progress => _operationSucceeded ? "操作成功" : "正在处理",
         DialogKind.AddToArchive => "添加到当前压缩包", DialogKind.DeleteEntries => "从压缩包删除", DialogKind.Rename => "重命名",
-        DialogKind.Options => "设置",
         DialogKind.Message => _messageTitle,
         _ => OperationOnly ? "正在准备…" : "",
     };
@@ -135,7 +134,6 @@ public partial class MainWindow
         DialogKind.AddToArchive => Path.GetFileName(_operationArchive) + "!/" + _editDirectory,
         DialogKind.DeleteEntries => $"将从 {Path.GetFileName(_operationArchive)} 中删除所选 {_editEntries.Length} 个项目及其内容。",
         DialogKind.Rename => _editEntries.FirstOrDefault() ?? "",
-        DialogKind.Options => "外观、文件格式关联和系统右键菜单。",
         DialogKind.Message => "",
         _ => OperationOnly ? StatusMessage : "",
     };
@@ -560,7 +558,7 @@ public partial class MainWindow
     }
     private void CloseDialog()
     {
-        if (_busy || _pickerBusy || _settingsBusy) return;
+        if (_busy || _pickerBusy || _settingsWindowOpen) return;
         if (OperationOnly) { ArchiveWindowClose.Request(this); return; }
         _panel = DialogKind.None; _operationSucceeded = false; _resultPath = ""; _resultFolder = "";
         _password = ""; _passwordConfirm = ""; _dialogError = ""; Invalidate();
@@ -780,8 +778,8 @@ public partial class MainWindow
     }
     private void CycleTheme()
     {
-        _theme = _theme switch { ThemeVariant.System => ThemeVariant.Light, ThemeVariant.Light => ThemeVariant.Dark, _ => ThemeVariant.System };
-        ApplyTheme(FluentTheme.For(_theme));
+        SetSelectedTheme(_theme switch { ThemeVariant.System => ThemeVariant.Light, ThemeVariant.Light => ThemeVariant.Dark, _ => ThemeVariant.System });
+        if (!IsDisposed && Theme is { } theme) ApplyTheme(theme);
     }
     private static string ArchiveBaseName(string path)
     {

@@ -21,14 +21,17 @@ internal static class PreviewRenderer
         {
             var engine = new SharpCompressArchiveEngine();
             var files = new ArchiveFileService(engine);
-            using var window = new MainWindow
+            var integration = OperatingSystem.IsMacOS() ? (IShellIntegrationService)new MacShellIntegration()
+                : OperatingSystem.IsWindows() ? new WindowsShellIntegration() : null;
+            using Window window = showSettings ? new ArchiveSettingsWindow
+            {
+                ShellIntegration = integration,
+            } : new MainWindow
             {
                 Engine = engine, FileService = files, EditService = new(engine, files),
                 Desktop = new PreviewServices(), InitialPath = path,
-                ShellIntegration = OperatingSystem.IsMacOS() ? new MacShellIntegration()
-                    : OperatingSystem.IsWindows() ? new WindowsShellIntegration() : null,
+                ShellIntegration = integration,
             };
-            if (showSettings) window.RequestShowSettings();
             window.EnsureInitialized();
             var size = new Size(window.Width, window.Height);
             using var host = new HeadlessRoot(window) { AvailableSize = size };
@@ -37,7 +40,7 @@ internal static class PreviewRenderer
             painter.Prepare(window.Content!);
             host.UpdateLayout();
             var wait = System.Diagnostics.Stopwatch.StartNew();
-            while (window.TaskIsRunning && wait.Elapsed < TimeSpan.FromSeconds(10))
+            while (IsBusy(window) && wait.Elapsed < TimeSpan.FromSeconds(10))
             {
                 host.DrainPostedWork();
                 host.UpdateLayout();
@@ -55,6 +58,13 @@ internal static class PreviewRenderer
         }
         finally { TextMeasurer.Current = previous; }
     }
+
+    private static bool IsBusy(Window window) => window switch
+    {
+        MainWindow main => main.TaskIsRunning,
+        ArchiveSettingsWindow settings => settings.TaskIsRunning,
+        _ => false,
+    };
 
     private sealed class PreviewServices : IDesktopServices
     {

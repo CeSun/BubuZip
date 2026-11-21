@@ -32,5 +32,6 @@ public sealed class ArchiveApplication : Application
         if (!OperatingSystem.IsMacOS()) window.PrepareInitialRequests();
         MainWindow = window;
         window.OperationWindows = new DesktopArchiveOperationWindows(this, window.Desktop);
+        window.SettingsWindows = new DesktopArchiveSettingsWindows(this);
     }
 }

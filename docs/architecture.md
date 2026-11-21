@@ -40,7 +40,7 @@ EclipseArchive/
 
 ## 框架依赖
 
-`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `41cb24c82fe20d9289969f581078970a22011424`。
+`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `537f42f10307182cb6bb96e23aa019c3f5f19497`。
 
 应用通过子模块内的项目引用使用框架。主仓库的子模块记录决定实际框架版本，构建与旁边的 EclipseUI 检出目录无关。这样不同开发者和构建环境可以还原相同依赖，也不会意外使用框架工作目录中的未提交修改。
 
@@ -54,7 +54,7 @@ git submodule update --init --recursive
 
 当前原生对话框由应用的桌面服务提供，EclipseUI 子模块保持独立。窗口、布局、输入和主题能力由框架提供，归档操作与文件管理交互由应用维护。
 
-应用使用的 EclipseUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`。Windows 和 macOS 使用软件栅格化并由对应平台的图形表面呈现；Linux 使用 Vulkan 后端。软件后端尚无模糊指令，阴影仅绘制偏移后的轮廓，能力标识不包含 `Blur`。
+应用使用的 EclipseUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`。Windows 和 macOS 使用软件栅格化并由对应平台的图形表面呈现；Linux 使用 Vulkan 后端。框架支持高斯阴影；应用自建主窗口和独立操作窗口均接入对应平台的原生弹出窗口工厂，下拉框和菜单默认使用独立的原生弹出窗口。
 
 窗口像素回归使用真实 `MainWindow` 的布局与裁剪，分别覆盖浅色、深色以及 1 倍、2 倍设备缩放。每组检查首次绘制及选择变化前后的八个连续帧，断言背景无大面积透明缺失、重复状态的像素哈希一致；文字替身用于隔离系统字体差异。原生窗口启动检查另行验证 macOS 纹理呈现路径。
 
@@ -72,7 +72,7 @@ ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加�
 
 ## 设置与系统集成
 
-共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 BubuZip 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。主窗口的关闭、操作目标切换与请求队列遵循设置忙碌状态。
+`ArchiveSettingsWindow` 在独立原生窗口中提供设置，共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`Application.ShowDialog` 和 EclipseUI 的三平台 `IWindowLifetime` 统一管理设置和进度窗口、窗口登记、宿主及剪贴板恢复；BubuZip 不再自己创建副窗口或覆盖 Windows 生命周期。主窗口关闭不会关闭其他窗口，最后一个窗口关闭后程序退出，`Application.Shutdown` 和系统的显式退出命令关闭全部窗口。macOS 应用只保留 Finder 启动文档的隐藏窗口准备阶段，随后将同一原生窗口交给框架运行和管理。设置从主窗口更新完成后的 UI 队列打开，同一时间只打开一个；`Application.SetTheme` 同步所有仍打开的窗口并更新后续窗口的默认主题，格式勾选在本次运行的多次打开之间保留。关闭时取消异步请求并忽略晚返回结果。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 BubuZip 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。
 
 `ArchiveShellFormats.Extensions` 是跨平台支持格式目录，设置、系统注册和参数验证共用；macOS 包声明也保持相同范围。仅声明当前读取器支持的格式。`MacShellIntegration` 注册当前 `.app`，按包内文档类型设置默认角色处理程序，再读取系统结果；不写单文件 `com.apple.LaunchServices.OpenWith`，不清除下载隔离属性。对于已有单文件绑定与下载隔离组合引发的系统拦截，应用无法在未收到请求之前处理该提示，仍可通过应用内打开文件。
 

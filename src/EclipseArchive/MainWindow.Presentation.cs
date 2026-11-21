@@ -57,14 +57,6 @@ public partial class MainWindow
         Invalidate();
     }
     private void ShowMore() { MainMenu.Open(); }
-    private void ChooseTheme(int index)
-    {
-        _theme = index switch { 1 => ThemeVariant.Light, 2 => ThemeVariant.Dark, _ => ThemeVariant.System };
-        ApplyTheme(EclipseUI.Themes.Fluent.FluentTheme.For(_theme));
-        Invalidate();
-    }
-    private readonly string[] _themeNames = ["跟随系统", "浅色", "深色"];
-    private int ThemeIndex { get => _theme switch { ThemeVariant.Light => 1, ThemeVariant.Dark => 2, _ => 0 }; set => ChooseTheme(value); }
 
     private async void RunBenchmark()
     {

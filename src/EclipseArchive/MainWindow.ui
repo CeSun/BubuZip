@@ -92,7 +92,7 @@
             <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
         </ContextMenu>
         <ArchiveSurface Ref={DialogOverlay} IsVisible={OperationOnly || _panel != DialogKind.None} Style="Background: #00000066">
-            <ArchiveDialogBorder Ref={DialogFrame} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : _panel == DialogKind.Options ? 680 : 560} MaxHeight={_panel == DialogKind.Options ? 560 : double.PositiveInfinity} Margin={OperationOnly ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderColor="#80808060" Style="Background: theme(#2C2C2C, #FAFAFA)">
+            <ArchiveDialogBorder Ref={DialogFrame} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : 560} Margin={OperationOnly ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderColor="#80808060" Style="Background: theme(#2C2C2C, #FAFAFA)">
                 <ArchiveSurface RowDefinitions="*,Auto">
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Padding="24" Gap="14">
@@ -104,47 +104,6 @@
                                     <TextBlock TextWrapping="Wrap">{line.Length == 0 ? " " : line}</TextBlock>
                                 }
                             </StackPanel>
-                        }
-                        @if (_panel == DialogKind.Options) {
-                            <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
-                                <TextBlock VerticalAlignment="Center">外观</TextBlock>
-                                <ComboBox Grid.Column="1" ItemsSource={_themeNames} @bind-SelectedIndex={ThemeIndex} />
-                            </ArchiveSurface>
-                            @if (ShellIntegration is not null) {
-                                <StackPanel Gap="10" IsEnabled={!_settingsBusy}>
-                                    <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
-                                        <TextBlock FontSize="17">文件格式关联</TextBlock>
-                                        <Button Grid.Column="1" OnClick={RefreshSystemIntegration}>刷新状态</Button>
-                                    </ArchiveSurface>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">选择要用 BubuZip 打开的压缩格式。系统要求确认时，请在打开的设置窗口完成选择，再刷新状态。</TextBlock>
-                                    <ArchiveAssociationFormatSelector Ref={_associationSelector} Choices={_associationFormats} SelectionChanged={AssociationFormatsChanged} />
-                                    <WrapPanel Gap="8">
-                                        <Button OnClick={SelectAllAssociationFormats}>全选</Button>
-                                        <Button OnClick={ClearAssociationFormats}>取消全选</Button>
-                                        <Button OnClick={AssociateSelectedFormats} IsEnabled={SelectedAssociationCount > 0}>关联所选格式</Button>
-                                    </WrapPanel>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">{AssociationStatusText}</TextBlock>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">{AssociatedFormatText}</TextBlock>
-                                    <TextBlock FontSize="17">{SystemMenuTitle + "右键菜单"}</TextBlock>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">{MenuStatusText}</TextBlock>
-                                    <WrapPanel Gap="8">
-                                        <Button OnClick={RegisterSystemMenu}>注册右键菜单</Button>
-                                        <Button OnClick={UnregisterSystemMenu} IsEnabled={_integrationStatus?.MenuInstalled == true}>移除右键菜单</Button>
-                                    </WrapPanel>
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">BubuZip 子菜单提供打开压缩包、提取、测试和创建 ZIP／7z；可用命令随选中的文件变化。</TextBlock>
-                                </StackPanel>
-                                @if (_settingsBusy) {
-                                    <TextBlock FontSize="12">正在处理系统设置…</TextBlock>
-                                }
-                                @if (_settingsFeedback.Length > 0) {
-                                    <TextBlock FontSize="12" TextWrapping="Wrap">{_settingsFeedback}</TextBlock>
-                                }
-                                @if (_settingsError.Length > 0) {
-                                    <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{_settingsError}</TextBlock>
-                                }
-                            } else {
-                                <TextBlock FontSize="13" TextWrapping="Wrap">当前平台暂不提供文件格式关联和系统右键菜单设置。</TextBlock>
-                            }
                         }
                         @if (_panel == DialogKind.Create || _panel == DialogKind.AddToArchive) {
                             <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
@@ -233,9 +192,9 @@
                     </StackPanel>
                     </ScrollViewer>
                     <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,120,8,96" Padding="16" Style="Background: theme(#242424, #F0F0F0)">
-                        <Button Grid.Column="1" IsVisible={_panel != DialogKind.Progress && _panel != DialogKind.Options && _panel != DialogKind.Message && _panel != DialogKind.None} OnClick={ConfirmDialog} IsEnabled={!_busy}>{DialogConfirmLabel}</Button>
+                        <Button Grid.Column="1" IsVisible={_panel != DialogKind.Progress && _panel != DialogKind.Message && _panel != DialogKind.None} OnClick={ConfirmDialog} IsEnabled={!_busy}>{DialogConfirmLabel}</Button>
                         <Button Grid.Column="1" IsVisible={_panel == DialogKind.Progress && _operationSucceeded} OnClick={OpenResultFolder} IsEnabled={!_busy}>打开文件夹</Button>
-                        <Button Grid.Column="3" Ref={DialogDismissButton} OnClick={DismissDialog} IsEnabled={_panel != DialogKind.Progress || _operationSucceeded || !_cancelRequested}>{_operationSucceeded && _panel == DialogKind.Progress ? "确认" : _panel is DialogKind.Options or DialogKind.Message ? "关闭" : "取消"}</Button>
+                        <Button Grid.Column="3" Ref={DialogDismissButton} OnClick={DismissDialog} IsEnabled={_panel != DialogKind.Progress || _operationSucceeded || !_cancelRequested}>{_operationSucceeded && _panel == DialogKind.Progress ? "确认" : _panel == DialogKind.Message ? "关闭" : "取消"}</Button>
                     </ArchiveSurface>
                 </ArchiveSurface>
             </ArchiveDialogBorder>

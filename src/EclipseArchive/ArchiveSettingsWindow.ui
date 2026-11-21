@@ -1,0 +1,56 @@
+@namespace EclipseArchive
+@using EclipseUI
+@using EclipseUI.Elements
+
+<Window Title="BubuZip 设置" Width="720" Height="640" CloseOnEscape="true">
+    <ArchiveSurface RowDefinitions="*,Auto" Style="Background: theme(#2C2C2C, #FAFAFA)">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Padding="24" Gap="14">
+                <TextBlock FontSize="22">设置</TextBlock>
+                <TextBlock FontSize="13" TextWrapping="Wrap">外观、文件格式关联和系统右键菜单。</TextBlock>
+                <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
+                    <TextBlock VerticalAlignment="Center">外观</TextBlock>
+                    <ComboBox Grid.Column="1" ItemsSource={_themeNames} @bind-SelectedIndex={ThemeIndex} />
+                </ArchiveSurface>
+                @if (ShellIntegration is not null) {
+                    <StackPanel Gap="10" IsEnabled={!_settingsBusy}>
+                        <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
+                            <TextBlock FontSize="17">文件格式关联</TextBlock>
+                            <Button Grid.Column="1" OnClick={RefreshSystemIntegration}>刷新状态</Button>
+                        </ArchiveSurface>
+                        <TextBlock FontSize="12" TextWrapping="Wrap">选择要用 BubuZip 打开的压缩格式。系统要求确认时，请在打开的设置窗口完成选择，再刷新状态。</TextBlock>
+                        <ArchiveAssociationFormatSelector Ref={_associationSelector} Choices={_associationFormats} SelectionChanged={AssociationFormatsChanged} />
+                        <WrapPanel Gap="8">
+                            <Button OnClick={SelectAllAssociationFormats}>全选</Button>
+                            <Button OnClick={ClearAssociationFormats}>取消全选</Button>
+                            <Button OnClick={AssociateSelectedFormats} IsEnabled={SelectedAssociationCount > 0}>关联所选格式</Button>
+                        </WrapPanel>
+                        <TextBlock FontSize="12" TextWrapping="Wrap">{AssociationStatusText}</TextBlock>
+                        <TextBlock FontSize="12" TextWrapping="Wrap">{AssociatedFormatText}</TextBlock>
+                        <TextBlock FontSize="17">{SystemMenuTitle + "右键菜单"}</TextBlock>
+                        <TextBlock FontSize="12" TextWrapping="Wrap">{MenuStatusText}</TextBlock>
+                        <WrapPanel Gap="8">
+                            <Button OnClick={RegisterSystemMenu}>注册右键菜单</Button>
+                            <Button OnClick={UnregisterSystemMenu} IsEnabled={_integrationStatus?.MenuInstalled == true}>移除右键菜单</Button>
+                        </WrapPanel>
+                        <TextBlock FontSize="12" TextWrapping="Wrap">BubuZip 子菜单提供打开压缩包、提取、测试和创建 ZIP／7z；可用命令随选中的文件变化。</TextBlock>
+                    </StackPanel>
+                    @if (_settingsBusy) {
+                        <TextBlock FontSize="12">正在处理系统设置…</TextBlock>
+                    }
+                    @if (_settingsFeedback.Length > 0) {
+                        <TextBlock FontSize="12" TextWrapping="Wrap">{_settingsFeedback}</TextBlock>
+                    }
+                    @if (_settingsError.Length > 0) {
+                        <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{_settingsError}</TextBlock>
+                    }
+                } else {
+                    <TextBlock FontSize="13" TextWrapping="Wrap">当前平台暂不提供文件格式关联和系统右键菜单设置。</TextBlock>
+                }
+            </StackPanel>
+        </ScrollViewer>
+        <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,96" Padding="16" Style="Background: theme(#242424, #F0F0F0)">
+            <Button Grid.Column="1" OnClick={Close}>关闭</Button>
+        </ArchiveSurface>
+    </ArchiveSurface>
+</Window>
