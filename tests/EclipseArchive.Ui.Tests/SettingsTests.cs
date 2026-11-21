@@ -8,6 +8,30 @@ namespace EclipseArchive.Ui.Tests;
 
 public sealed class SettingsTests
 {
+    [Fact]
+    public void SettingsTabsRetainFormatSelectionWithoutChangingSystemIntegration()
+    {
+        var integration = new FakeShellIntegration();
+        using var fixture = new SettingsFixture(integration);
+        fixture.Click("取消全选");
+        var zip = fixture.Elements<CheckBox>().Single(box => box.Label == ".zip");
+        zip.Toggle();
+        var tabs = Assert.Single(fixture.Elements<TabControl>());
+        Assert.Equal(new[] { "系统", "右键菜单", "外观" }, tabs.Children.Cast<TabItem>().Select(tab => tab.Header));
+        tabs.SelectedIndex = 1;
+        fixture.Host.UpdateLayout();
+        Assert.True(fixture.Button("注册右键菜单").IsEffectivelyVisible);
+        Assert.False(zip.IsEffectivelyVisible);
+        tabs.SelectedIndex = 2;
+        fixture.Host.UpdateLayout();
+        Assert.True(Assert.Single(fixture.Elements<ComboBox>()).IsEffectivelyVisible);
+        tabs.SelectedIndex = 0;
+        fixture.Host.UpdateLayout();
+        Assert.True(zip.IsEffectivelyVisible && zip.Checked);
+        Assert.Equal(0, integration.AssociationCalls);
+        Assert.Equal(0, integration.RegisterCalls);
+    }
+
     [Theory]
     [InlineData(720, 640, 5)]
     [InlineData(480, 640, 4)]

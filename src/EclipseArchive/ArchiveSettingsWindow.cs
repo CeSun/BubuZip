@@ -6,7 +6,13 @@ namespace EclipseArchive;
 public partial class ArchiveSettingsWindow
 {
     [UiParameter] public IShellIntegrationService? ShellIntegration { get; set; }
-    [UiParameter] public ThemeVariant SelectedTheme { get; set; } = ThemeVariant.System;
+    public ArchiveAppearance? Appearance { get; set; }
+    private ThemeVariant _selectedTheme = ThemeVariant.System;
+    [UiParameter] public ThemeVariant SelectedTheme
+    {
+        get => Appearance?.Variant ?? _selectedTheme;
+        set => _selectedTheme = value;
+    }
     [UiParameter] public Action<ThemeVariant> ThemeChanged { get; set; } = _ => { };
     [UiParameter] public IReadOnlyList<ArchiveAssociationFormatChoice> AssociationFormats { get; set; } = ArchiveShellFormats.Extensions
         .Select(extension => new ArchiveAssociationFormatChoice(extension)).ToArray();
@@ -36,8 +42,8 @@ public partial class ArchiveSettingsWindow
         {
             if (IsDisposed || value is < 0 or > 2 || value == ThemeIndex) return;
             SelectedTheme = value switch { 1 => ThemeVariant.Light, 2 => ThemeVariant.Dark, _ => ThemeVariant.System };
-            Theme = FluentTheme.For(SelectedTheme);
-            ThemeChanged(SelectedTheme);
+            ThemeChanged(_selectedTheme);
+            Theme = (IHostTheme?)Appearance ?? FluentTheme.For(SelectedTheme);
             Invalidate();
         }
     }
@@ -45,8 +51,14 @@ public partial class ArchiveSettingsWindow
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        Theme = FluentTheme.For(SelectedTheme);
+        if (Appearance is { } appearance) appearance.Changed += AppearanceChanged;
+        Theme = (IHostTheme?)Appearance ?? FluentTheme.For(SelectedTheme);
         Invalidate();
+    }
+
+    private void AppearanceChanged()
+    {
+        if (!IsDisposed) Invalidate();
     }
 
     protected override void OnUpdating()
@@ -127,6 +139,7 @@ public partial class ArchiveSettingsWindow
 
     protected override void OnDispose()
     {
+        if (Appearance is { } appearance) appearance.Changed -= AppearanceChanged;
         try { _lifetime.Cancel(); }
         finally { _lifetime.Dispose(); base.OnDispose(); }
     }

@@ -6,7 +6,7 @@ using Microsoft.Win32;
 
 namespace EclipseArchive.Desktop;
 
-/// <summary>Per-user file capabilities and classic Explorer cascading menus.</summary>
+/// <summary>Per-user file capabilities and modern or classic Explorer menus.</summary>
 internal sealed class WindowsShellIntegration : IShellIntegrationService
 {
     internal const string ProgId = "EclipseArchive.Archive";
@@ -22,19 +22,25 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
     private readonly Action<string> _openUri;
     private readonly Action _notify;
     private readonly bool _checkExecutableExists;
+    private readonly IWindowsModernMenu? _modernMenu;
 
     public string PlatformName => "Windows";
 
-    public WindowsShellIntegration() : this(Environment.ProcessPath ?? "", CreateRegistry(), OpenUri, Notify, true) { }
+    public WindowsShellIntegration() : this(Environment.ProcessPath ?? "", CreateRegistry(), OpenUri, Notify, true)
+    {
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+            _modernMenu = new WindowsModernMenu(_executable, _registry);
+    }
 
     internal WindowsShellIntegration(string executable, IWindowsIntegrationRegistry registry,
-        Action<string> openUri, Action notify, bool checkExecutableExists = false)
+        Action<string> openUri, Action notify, bool checkExecutableExists = false, IWindowsModernMenu? modernMenu = null)
     {
         _executable = executable;
         _registry = registry;
         _openUri = openUri;
         _notify = notify;
         _checkExecutableExists = checkExecutableExists;
+        _modernMenu = modernMenu;
     }
 
     public Task<ShellIntegrationStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -46,10 +52,15 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
                 string.Equals(_registry.GetDefaultProgId(extension), ProgId, StringComparison.OrdinalIgnoreCase) &&
                 ownCommand == OpenCommand(_executable)).ToArray();
             var menu = IsOwnedMenu(FileMenu) && IsOwnedMenu(DirectoryMenu);
-            return new ShellIntegrationStatus(defaults, menu, menu,
+            var modern = _modernMenu?.IsRegistered() == true;
+            return new ShellIntegrationStatus(defaults, menu || modern, menu || modern,
                 "文件格式注册后仍需在 Windows“默认应用”中确认；这里只显示系统已确认的默认关联。",
-                menu ? "已注册资源管理器菜单。Windows 11 请在“显示更多选项”中使用；当前支持单个文件或文件夹。"
-                     : "尚未注册资源管理器菜单。注册仅作用于当前用户，无需管理员权限。Windows 11 菜单位于“显示更多选项”。");
+                modern ? "已注册 Windows 11 一级右键菜单。右键单个文件或文件夹即可使用 BubuZip；若尚未显示，请重启资源管理器或注销后重新登录。"
+                : _modernMenu is not null
+                    ? menu ? "当前仅有“显示更多选项”中的旧版菜单，请点击“注册右键菜单”升级为 Windows 11 一级菜单。"
+                           : "尚未注册 Windows 11 一级右键菜单。点击注册后，右键单个文件或文件夹即可使用 BubuZip。"
+                    : menu ? "已注册资源管理器菜单。Windows 11 请在“显示更多选项”中使用；当前支持单个文件或文件夹。"
+                           : "尚未注册资源管理器菜单。注册仅作用于当前用户，无需管理员权限。");
         }, cancellationToken);
 
     public Task<ShellIntegrationResult> AssociateAsync(IReadOnlyList<string> extensions, CancellationToken cancellationToken = default)
@@ -85,6 +96,14 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
         {
             cancellationToken.ThrowIfCancellationRequested();
             EnsurePublishExecutable();
+            if (_modernMenu is not null)
+            {
+                _modernMenu.Register();
+                // Migrate only after package registration succeeds, preserving the working legacy menu on failure.
+                RemoveOwnedClassicMenus();
+                _notify();
+                return new ShellIntegrationResult("已注册 Windows 11 一级右键菜单。右键单个文件或文件夹即可使用 BubuZip；若尚未显示，请重启资源管理器或注销后重新登录。");
+            }
             RegisterMenu(FileMenu, includeArchiveCommands: true);
             RegisterMenu(DirectoryMenu, includeArchiveCommands: false);
             _notify();
@@ -95,11 +114,17 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
         => Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var menu in new[] { FileMenu, DirectoryMenu })
-                if (IsOwnedMenu(menu)) _registry.DeleteTree(menu);
+            _modernMenu?.Unregister();
+            RemoveOwnedClassicMenus();
             _notify();
             return new ShellIntegrationResult("已移除此应用注册的资源管理器菜单。文件格式关联保持原有状态。");
         }, cancellationToken);
+
+    private void RemoveOwnedClassicMenus()
+    {
+        foreach (var menu in new[] { FileMenu, DirectoryMenu })
+            if (IsOwnedMenu(menu)) _registry.DeleteTree(menu);
+    }
 
     private void RegisterMenu(string path, bool includeArchiveCommands)
     {

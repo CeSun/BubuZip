@@ -166,6 +166,81 @@ public sealed class WindowsShellIntegrationTests
     }
 
     [Fact]
+    public async Task Windows11MigratesOwnedClassicMenusOnlyAfterModernRegistrationSucceeds()
+    {
+        var registry = new MemoryRegistry();
+        await new WindowsShellIntegration(Executable, registry, _ => { }, () => { }).RegisterMenuAsync();
+        var modern = new ModernMenu();
+        var service = new WindowsShellIntegration(Executable, registry, _ => { }, () => { }, modernMenu: modern);
+        Assert.Contains("旧版菜单", (await service.GetStatusAsync()).MenuMessage);
+
+        var result = await service.RegisterMenuAsync();
+
+        Assert.True(modern.Registered);
+        Assert.Contains("一级", result.Message);
+        Assert.Null(registry.GetString(WindowsShellIntegration.FileMenu, "MUIVerb"));
+        Assert.Null(registry.GetString(WindowsShellIntegration.DirectoryMenu, "MUIVerb"));
+        var status = await service.GetStatusAsync();
+        Assert.True(status.MenuInstalled);
+        Assert.True(status.MenuEnabled);
+        Assert.Contains("一级", status.MenuMessage);
+        await service.UnregisterMenuAsync();
+        Assert.False(modern.Registered);
+        Assert.False((await service.GetStatusAsync()).MenuInstalled);
+    }
+
+    [Fact]
+    public async Task FailedModernRegistrationPreservesClassicMenuAndDoesNotClaimModernSuccess()
+    {
+        var registry = new MemoryRegistry();
+        await new WindowsShellIntegration(Executable, registry, _ => { }, () => { }).RegisterMenuAsync();
+        var modern = new ModernMenu { FailRegistration = true };
+        var notifications = 0;
+        var service = new WindowsShellIntegration(Executable, registry, _ => { }, () => notifications++, modernMenu: modern);
+
+        await Assert.ThrowsAsync<IOException>(() => service.RegisterMenuAsync());
+
+        Assert.Equal(0, notifications);
+        Assert.Empty(registry.DeletedTrees);
+        Assert.False(modern.Registered);
+        Assert.Contains("旧版菜单", (await service.GetStatusAsync()).MenuMessage);
+    }
+
+    [Fact]
+    public async Task ModernRegistrationDoesNotRemoveAnotherExecutableClassicMenu()
+    {
+        var registry = new MemoryRegistry();
+        await new WindowsShellIntegration(@"C:\Other\BubuZip.exe", registry, _ => { }, () => { }).RegisterMenuAsync();
+        var modern = new ModernMenu();
+        var service = new WindowsShellIntegration(Executable, registry, _ => { }, () => { }, modernMenu: modern);
+        await service.RegisterMenuAsync();
+        Assert.Empty(registry.DeletedTrees);
+        Assert.True((await service.GetStatusAsync()).MenuInstalled);
+    }
+
+    [Fact]
+    public async Task CancelledRegistrationDoesNotInstallModernPackage()
+    {
+        var modern = new ModernMenu();
+        var service = new WindowsShellIntegration(Executable, new MemoryRegistry(), _ => { }, () => { }, modernMenu: modern);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RegisterMenuAsync(new CancellationToken(true)));
+        Assert.False(modern.Registered);
+    }
+
+    private sealed class ModernMenu : IWindowsModernMenu
+    {
+        internal bool Registered;
+        internal bool FailRegistration;
+        public bool IsRegistered() => Registered;
+        public void Register()
+        {
+            if (FailRegistration) throw new IOException("Package registration failed.");
+            Registered = true;
+        }
+        public void Unregister() => Registered = false;
+    }
+
+    [Fact]
     public async Task CancellationBeforeRegistrationDoesNotWriteAnySettings()
     {
         var registry = new MemoryRegistry();

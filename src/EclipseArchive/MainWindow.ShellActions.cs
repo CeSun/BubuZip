@@ -7,7 +7,7 @@ public partial class MainWindow
 {
     private bool _shellExtractHere;
 
-    private async Task HandleShellRequestAsync(ArchiveShellRequest request)
+    private async Task HandleShellRequestAsync(ArchiveShellRequest request, bool newWindow = false)
     {
         var paths = request.Paths.Select(ArchivePaths.ResolveUserPath).ToArray();
         if (request.Action == ArchiveShellAction.Open && ShellRequestDecoder?.Invoke(paths[0]) is { } command)
@@ -19,7 +19,8 @@ public partial class MainWindow
             if (!File.Exists(path) && !Directory.Exists(path)) throw new FileNotFoundException("所选文件或文件夹已不存在。", path);
         if (request.Action == ArchiveShellAction.Open)
         {
-            await TryOpenArchiveAsync(paths[0]);
+            if (newWindow && ArchiveWindows is not null) ArchiveWindows.Open(paths[0]);
+            else await TryOpenArchiveAsync(paths[0]);
             return;
         }
 

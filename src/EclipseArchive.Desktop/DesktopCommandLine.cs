@@ -10,11 +10,12 @@ internal sealed record DesktopCommandLineOptions(
     IReadOnlyList<string> ArchivePaths,
     bool ShowHelp = false,
     ArchiveShellRequest? ShellRequest = null,
-    bool OpenSettings = false);
+    bool OpenSettings = false,
+    bool CreateArchive = false);
 
 internal static class DesktopCommandLine
 {
-    internal const string Usage = "Usage: BubuZip [--frames positive-number] [--path folder] [--shot image.png] [--dark] [--settings] [--shell open|extract|extract-here|extract-folder|test|compress|compress-7z|compress-zip] [--] [file ...]";
+    internal const string Usage = "Usage: BubuZip [--frames positive-number] [--path folder] [--shot image.png] [--dark] [--settings|--create] [--shell open|extract|extract-here|extract-folder|test|compress|compress-7z|compress-zip] [--] [file ...]";
 
     internal static DesktopCommandLineOptions Parse(string[] arguments)
     {
@@ -26,6 +27,7 @@ internal static class DesktopCommandLine
         var positionalOnly = false;
         ArchiveShellAction? shellAction = null;
         var openSettings = false;
+        var createArchive = false;
 
         if (arguments is ["--help"] or ["-h"])
             return new(null, initialPath, null, false, archivePaths, ShowHelp: true);
@@ -52,6 +54,7 @@ internal static class DesktopCommandLine
                 case "--shot": shotPath = NormalizePath(ReadValue(arguments, ref index)); break;
                 case "--dark": darkPreview = true; break;
                 case "--settings": openSettings = true; break;
+                case "--create": createArchive = true; break;
                 case "--shell":
                     if (shellAction is not null) throw new ArgumentException("Only one --shell action is allowed.");
                     shellAction = ParseShellAction(ReadValue(arguments, ref index));
@@ -72,10 +75,12 @@ internal static class DesktopCommandLine
             throw new ArgumentException("--shell requires at least one file or folder.");
         if (openSettings && archivePaths.Count > 0)
             throw new ArgumentException("--settings cannot be combined with file-open or shell actions.");
+        if (createArchive && (openSettings || archivePaths.Count > 0))
+            throw new ArgumentException("--create cannot be combined with settings, file-open or shell actions.");
 
         return new(frameLimit, initialPath, shotPath, darkPreview, archivePaths.ToArray(),
             ShellRequest: shellAction is { } action ? new(action, archivePaths.ToArray()) : null,
-            OpenSettings: openSettings);
+            OpenSettings: openSettings, CreateArchive: createArchive);
     }
 
     private static ArchiveShellAction ParseShellAction(string value) => value switch

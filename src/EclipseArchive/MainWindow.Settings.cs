@@ -7,6 +7,7 @@ public partial class MainWindow
 {
     [UiParameter] public IShellIntegrationService? ShellIntegration { get; set; }
     public IArchiveSettingsWindows? SettingsWindows { get; set; }
+    public ArchiveAppearance? Appearance { get; set; }
     private readonly ArchiveAssociationFormatChoice[] _associationFormats = ArchiveShellFormats.Extensions
         .Select(extension => new ArchiveAssociationFormatChoice(extension)).ToArray();
     private bool _showSettingsRequested;
@@ -42,7 +43,8 @@ public partial class MainWindow
             {
                 ShellIntegration = ShellIntegration,
                 AssociationFormats = _associationFormats,
-                SelectedTheme = _theme,
+                Appearance = Appearance,
+                SelectedTheme = Appearance?.Variant ?? _theme,
                 ThemeChanged = SetSelectedTheme,
                 MaxTicks = MaxTicks,
             });
@@ -61,8 +63,18 @@ public partial class MainWindow
     private void SetSelectedTheme(ThemeVariant theme)
     {
         if (IsDisposed) return;
+        try
+        {
+            if (Appearance is { } appearance) appearance.Variant = theme;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            ReportError(error);
+            return;
+        }
         _theme = theme;
-        Theme = FluentTheme.For(theme);
+        Theme = (IHostTheme?)Appearance ?? FluentTheme.For(theme);
+        ApplyTheme(Theme);
         Invalidate();
     }
 }

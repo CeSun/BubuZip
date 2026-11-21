@@ -1,0 +1,4 @@
+LIBRARY BubuZipShell
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

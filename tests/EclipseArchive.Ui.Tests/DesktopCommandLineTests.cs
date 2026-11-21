@@ -5,6 +5,29 @@ namespace EclipseArchive.Ui.Tests;
 
 public sealed class DesktopCommandLineTests
 {
+    [Fact]
+    public void CreateStartsAnEmptyCreationWindowInTheRequestedFolder()
+    {
+        var options = DesktopCommandLine.Parse(["--create", "--path", "output folder"]);
+        Assert.True(options.CreateArchive);
+        Assert.Equal(Path.GetFullPath("output folder"), options.InitialPath);
+        Assert.Empty(options.ArchivePaths);
+        Assert.False(options.OpenSettings);
+    }
+
+    [Theory]
+    [InlineData("BubuZip.exe", false)]
+    [InlineData("dotnet.exe", true)]
+    public void IndependentWindowLaunchPreservesPathsAndSupportsTheDevelopmentHost(string executable, bool managedHost)
+    {
+        var path = Path.GetFullPath("中文 目录/压缩 包.zip");
+        var assembly = Path.GetFullPath("BubuZip.dll");
+        var start = DesktopArchiveWindows.CreateStartInfo(executable, assembly, ["--", path]);
+        Assert.False(start.UseShellExecute);
+        Assert.True(start.CreateNoWindow);
+        Assert.Equal(managedHost ? new[] { assembly, "--", path } : new[] { "--", path }, start.ArgumentList);
+    }
+
     [Theory]
     [InlineData("open", ArchiveShellAction.Open)]
     [InlineData("extract", ArchiveShellAction.Extract)]
@@ -92,6 +115,9 @@ public sealed class DesktopCommandLineTests
 
     [Theory]
     [InlineData("--unknown")]
+    [InlineData("--create", "--settings")]
+    [InlineData("--create", "file.zip")]
+    [InlineData("--create", "--shell", "compress", "file.txt")]
     [InlineData("--shell")]
     [InlineData("--shell", "test")]
     [InlineData("--shell", "invalid", "file.zip")]

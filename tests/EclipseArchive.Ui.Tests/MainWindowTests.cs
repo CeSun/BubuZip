@@ -16,6 +16,122 @@ namespace EclipseArchive.Ui.Tests;
 public sealed class MainWindowTests
 {
     [Fact]
+    public void DesktopCreateOpensAnIndependentWindowAndKeepsTheHomeUsable()
+    {
+        var windows = new CapturingArchiveWindows();
+        using var fixture = new WindowFixture { ArchiveWindows = windows };
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+        Assert.Equal([fixture.DirectoryPath], windows.CreatePaths);
+        Assert.False(fixture.Window.TaskIsRunning);
+        Assert.True(fixture.FindButton("打开压缩").IsEffectiveEnabled);
+        Assert.All(fixture.Elements<ArchiveDialogPopup>(), popup => Assert.False(popup.IsOpen));
+        Assert.Null(fixture.Window.CurrentLocation);
+    }
+
+    [Fact]
+    public void DesktopPickerOpensANewWindowAndPreservesTheCurrentDirectoryAndSelection()
+    {
+        var windows = new CapturingArchiveWindows();
+        using var fixture = new WindowFixture { ArchiveWindows = windows };
+        var first = fixture.CreateZip("first.zip", ("docs/readme.txt", "first"));
+        var second = fixture.CreateZip("second.zip", ("second.txt", "second"));
+        fixture.OpenWindow(first);
+        fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.SelectItem("readme.txt");
+        var selected = fixture.Files.SelectedItem;
+        fixture.Desktop.ArchiveChoice = second;
+        fixture.Click("打开压缩包…");
+        fixture.WaitForIdle();
+        Assert.Equal([second], windows.OpenPaths);
+        Assert.Equal(first, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal("docs/", fixture.Window.CurrentLocation.ArchivePrefix);
+        Assert.Same(selected, fixture.Files.SelectedItem);
+        Assert.False(fixture.Window.TaskIsRunning);
+    }
+
+    [Fact]
+    public void DesktopPickerCancellationLeavesTheHomeWithoutOpeningAWindow()
+    {
+        var windows = new CapturingArchiveWindows();
+        using var fixture = new WindowFixture { ArchiveWindows = windows };
+        fixture.OpenWindow();
+        fixture.Click("打开压缩");
+        fixture.WaitForIdle();
+        Assert.Empty(windows.OpenPaths);
+        Assert.Null(fixture.Window.CurrentLocation);
+    }
+
+    [Fact]
+    public void DesktopRunningOpenRequestsKeepTheOriginalArchive()
+    {
+        var windows = new CapturingArchiveWindows();
+        using var fixture = new WindowFixture { ArchiveWindows = windows };
+        var first = fixture.CreateZip("first.zip", ("first.txt", "first"));
+        var second = fixture.CreateZip("second.zip", ("second.txt", "second"));
+        fixture.OpenWindow(first);
+        fixture.WaitForIdle();
+        Task.Run(() => fixture.Window.RequestOpenArchive(second)).GetAwaiter().GetResult();
+        fixture.WaitForIdle();
+        Assert.Equal([second], windows.OpenPaths);
+        Assert.Equal(first, fixture.Window.CurrentLocation!.ArchivePath);
+    }
+
+    [Fact]
+    public void StandaloneCreationUsesTheWindowContentAndCreatesAReadableArchive()
+    {
+        using var fixture = new WindowFixture { StartCreating = true };
+        var source = fixture.WriteFile("standalone.txt", "independent window payload");
+        fixture.Desktop.Inputs = [source];
+        fixture.OpenWindow();
+        Assert.True(fixture.Window.OperationOnly);
+        Assert.Equal(900, fixture.Window.Width);
+        Assert.Equal(740, fixture.Window.Height);
+        Assert.Contains("添加到压缩包", fixture.Window.Title);
+        Assert.All(fixture.Elements<ArchiveDialogPopup>(), popup => Assert.False(popup.IsOpen));
+        fixture.Click("选择文件…");
+        fixture.WaitForIdle();
+        fixture.Click("确定");
+        fixture.WaitForIdle();
+        Assert.Equal("压缩包创建完成。", fixture.Window.StatusMessage);
+        Assert.Equal("independent window payload", fixture.ReadArchiveEntry(Path.Combine(fixture.DirectoryPath, "standalone.zip"), "standalone.txt"));
+    }
+
+    [Fact]
+    public void ShowingCreationPasswordsKeepsBothEntriesAndResetsWhenReopened()
+    {
+        using var fixture = new WindowFixture();
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+        var boxes = fixture.Elements<ArchivePasswordBox>().ToArray();
+        Assert.Equal(2, boxes.Length);
+        foreach (var box in boxes) box.Text = "test-password";
+        fixture.Host.UpdateLayout();
+        fixture.Elements<CheckBox>().Single(box => box.Label == "显示密码").Toggle();
+        fixture.Host.UpdateLayout();
+        Assert.All(boxes, box => { Assert.True(box.ShowPassword); Assert.Equal("test-password", box.Text); });
+        fixture.Click("取消");
+        fixture.Click("新建压缩");
+        Assert.All(fixture.Elements<ArchivePasswordBox>(), box => { Assert.False(box.ShowPassword); Assert.Empty(box.Text); });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StartupMultipleArchivesKeepTheFirstAndOpenAdditionalWindows(bool preflight)
+    {
+        var windows = new CapturingArchiveWindows();
+        using var fixture = new WindowFixture { ArchiveWindows = windows, Preflight = preflight };
+        var first = fixture.CreateZip("first.zip", ("first.txt", "first"));
+        var second = fixture.CreateZip("second.zip", ("second.txt", "second"));
+        fixture.OpenWindow(first, second);
+        fixture.WaitForIdle();
+        Assert.Equal(first, fixture.Window.CurrentLocation!.ArchivePath);
+        Assert.Equal([second], windows.OpenPaths);
+    }
+
+    [Fact]
     public void StartupOpenRequestOpensTheArchiveWithoutShowingAFilePicker()
     {
         using var fixture = new WindowFixture();
@@ -1011,6 +1127,9 @@ public sealed class MainWindowTests
         public string DirectoryPath { get; } = CreateTemporaryDirectory();
         public IArchiveEngine Engine { get; } = new SharpCompressArchiveEngine();
         public FakeDesktopServices Desktop { get; } = new();
+        public IArchiveWindows? ArchiveWindows { get; init; }
+        public bool StartCreating { get; init; }
+        public bool Preflight { get; init; }
         public MainWindow Window { get; private set; } = null!;
         public HeadlessRoot Host { get; private set; } = null!;
         public ListBox Files { get; private set; } = null!;
@@ -1024,8 +1143,12 @@ public sealed class MainWindowTests
                 FileService = new ArchiveFileService(Engine),
                 Desktop = Desktop,
                 InitialPath = DirectoryPath,
+                ArchiveWindows = ArchiveWindows,
+                StartCreating = StartCreating,
+                OperationOnly = StartCreating,
             };
             foreach (var path in requestPaths) Window.RequestOpenArchive(path);
+            if (Preflight) Window.PrepareInitialRequests();
             Window.EnsureInitialized();
             Host = new HeadlessRoot(Window) { AvailableSize = new Size(1140, 740) };
             Host.Content.SetThemeDefaults(FluentTheme.Light);
@@ -1161,6 +1284,14 @@ public sealed class MainWindowTests
             Directory.CreateDirectory(directory);
             return directory;
         }
+    }
+
+    private sealed class CapturingArchiveWindows : IArchiveWindows
+    {
+        public List<string> CreatePaths { get; } = [];
+        public List<string> OpenPaths { get; } = [];
+        public void Create(string initialPath) => CreatePaths.Add(initialPath);
+        public void Open(string archivePath) => OpenPaths.Add(archivePath);
     }
 
     private sealed class FakeDesktopServices : IDesktopServices, IAsyncDesktopDialogService

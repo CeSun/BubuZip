@@ -10,7 +10,7 @@ namespace EclipseArchive.Desktop;
 
 internal static class PreviewRenderer
 {
-    public static void Export(string path, string output, bool dark, bool showSettings = false)
+    public static void Export(string path, string output, bool dark, bool showSettings = false, bool createArchive = false)
     {
         var options = new HarfBuzzTextOptions();
         using var shaper = new HarfBuzzTextShaper(options.FontPaths.First(File.Exists));
@@ -26,18 +26,22 @@ internal static class PreviewRenderer
             using Window window = showSettings ? new ArchiveSettingsWindow
             {
                 ShellIntegration = integration,
+                SelectedTheme = dark ? ThemeVariant.Dark : ThemeVariant.Light,
             } : new MainWindow
             {
                 Engine = engine, FileService = files, EditService = new(engine, files),
                 Desktop = new PreviewServices(), InitialPath = path,
                 ShellIntegration = integration,
+                OperationOnly = createArchive, StartCreating = createArchive,
             };
             window.EnsureInitialized();
-            var size = new Size(window.Width, window.Height);
-            using var host = new HeadlessRoot(window) { AvailableSize = size };
+            using var host = new HeadlessRoot(window) { AvailableSize = new Size(window.Width, window.Height) };
             using var ui = host.InstallSynchronizationContext();
             var painter = new ElementPainter(dark ? FluentTheme.Dark : FluentTheme.Light, text);
             painter.Prepare(window.Content!);
+            host.UpdateLayout();
+            var size = new Size(window.Width, window.Height);
+            host.AvailableSize = size;
             host.UpdateLayout();
             var wait = System.Diagnostics.Stopwatch.StartNew();
             while (IsBusy(window) && wait.Elapsed < TimeSpan.FromSeconds(10))

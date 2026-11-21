@@ -7,7 +7,6 @@ using EclipseUI.Platform.Windows;
 using EclipseUI.Platform.Linux;
 using EclipseUI.Rendering.Vello;
 using EclipseUI.Text.Shaping;
-using EclipseUI.Themes.Fluent;
 using Microsoft.Extensions.DependencyInjection;
 
 DesktopCommandLineOptions options;
@@ -26,7 +25,7 @@ if (options.ShowHelp)
 
 if (options.ShotPath is not null)
 {
-    PreviewRenderer.Export(options.InitialPath, options.ShotPath, options.DarkPreview, options.OpenSettings);
+    PreviewRenderer.Export(options.InitialPath, options.ShotPath, options.DarkPreview, options.OpenSettings, options.CreateArchive);
     return 0;
 }
 
@@ -36,13 +35,16 @@ if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows() && !OperatingSyst
     return 1;
 }
 
+var appearance = new ArchiveAppearance(Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BubuZip", "appearance.txt"));
 var builder = AppBuilder.Configure<ArchiveApplication>()
     .UseVello(new VelloSurfaceOptions { UseSoftwareRasterizer = !OperatingSystem.IsLinux() })
     .UseHarfBuzzText()
-    .UseFluentTheme(ThemeVariant.System)
+    .UseTheme(appearance)
     .ConfigureServices(services =>
     {
-        services.AddSingleton(new DesktopLaunchOptions(options.FrameLimit, options.InitialPath, options.ArchivePaths, options.ShellRequest, options.OpenSettings));
+        services.AddSingleton(appearance);
+        services.AddSingleton(new DesktopLaunchOptions(options.FrameLimit, options.InitialPath, options.ArchivePaths, options.ShellRequest, options.OpenSettings, options.CreateArchive));
         services.AddSingleton<IArchiveEngine, SharpCompressArchiveEngine>();
         services.AddSingleton<ArchiveFileService>();
         services.AddSingleton<ArchiveEditService>();

@@ -6,22 +6,26 @@ public partial class MainWindow
 {
     public Func<string, ArchiveShellRequest?>? ShellRequestDecoder { get; set; }
 
-    private readonly ConcurrentQueue<ArchiveShellRequest> _openRequests = new();
+    private sealed record OpenRequest(ArchiveShellRequest Request, bool NewWindow);
+    private readonly ConcurrentQueue<OpenRequest> _openRequests = new();
+    private volatile bool _acceptingInitialRequests = true;
+    private int _initialArchiveQueued;
     private bool _openingRequestedArchive;
 
     // The macOS host calls this while its native window is still hidden. Only
     // decode/reroute here; operation work begins under the host's UI context.
     public void PrepareInitialRequests()
     {
-        var pending = new List<ArchiveShellRequest>();
-        while (_openRequests.TryDequeue(out var request))
+        var pending = new List<OpenRequest>();
+        while (_openRequests.TryDequeue(out var item))
         {
+            var request = item.Request;
             try
             {
                 if (request.Action == ArchiveShellAction.Open && ShellRequestDecoder?.Invoke(request.Paths[0]) is { } decoded)
                     request = decoded;
                 if (request.Action != ArchiveShellAction.Open) OperationOnly = true;
-                pending.Add(request);
+                pending.Add(item with { Request = request });
             }
             catch (Exception error)
             {
@@ -29,7 +33,14 @@ public partial class MainWindow
                 ReportError(error);
             }
         }
-        foreach (var request in pending) RequestShellAction(request);
+        foreach (var item in pending)
+        {
+            if (item.Request.Action is ArchiveShellAction.Compress or ArchiveShellAction.CompressSevenZip or ArchiveShellAction.CompressZip)
+                _openRequests.Enqueue(item);
+            else
+                foreach (var path in item.Request.Paths)
+                    _openRequests.Enqueue(item with { Request = new(item.Request.Action, [path]) });
+        }
     }
 
     // OS callbacks may arrive before the window exists or from a native event callback.
@@ -48,9 +59,14 @@ public partial class MainWindow
         if (_disposed) return;
         // Compression combines the selection. Other actions operate on each archive in order.
         if (request.Action is ArchiveShellAction.Compress or ArchiveShellAction.CompressSevenZip or ArchiveShellAction.CompressZip)
-            _openRequests.Enqueue(request with { Paths = request.Paths.ToArray() });
+            _openRequests.Enqueue(new(request with { Paths = request.Paths.ToArray() }, false));
         else
-            foreach (var path in request.Paths) _openRequests.Enqueue(new(request.Action, [path]));
+            foreach (var path in request.Paths)
+            {
+                var newWindow = request.Action == ArchiveShellAction.Open &&
+                    (Interlocked.Exchange(ref _initialArchiveQueued, 1) != 0 || !_acceptingInitialRequests);
+                _openRequests.Enqueue(new(new(request.Action, [path]), newWindow));
+            }
         Invalidate();
     }
 
@@ -61,10 +77,10 @@ public partial class MainWindow
         OpenRequestedArchive(request);
     }
 
-    private async void OpenRequestedArchive(ArchiveShellRequest request)
+    private async void OpenRequestedArchive(OpenRequest request)
     {
         _openingRequestedArchive = true;
-        try { await HandleShellRequestAsync(request); }
+        try { await HandleShellRequestAsync(request.Request, request.NewWindow); }
         catch (Exception error) { ReportError(error); }
         finally
         {

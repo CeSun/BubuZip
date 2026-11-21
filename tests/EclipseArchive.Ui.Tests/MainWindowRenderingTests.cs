@@ -61,7 +61,7 @@ public sealed class MainWindowRenderingTests
             Assert.True(bounds.Height <= height);
             if (!bounds.Contains(new Point(8, height - 8)))
                 Assert.Equal(before.GetPixel(8, height - 8), after.GetPixel(8, height - 8));
-            Assert.Equal(dark ? new Color(44, 44, 44) : new Color(250, 250, 250),
+            Assert.Equal(before.GetPixel(8, height - 8),
                 after.GetPixel((int)bounds.X + 12, (int)bounds.Y + 12));
             var start = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "开始");
             var cancel = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "取消");

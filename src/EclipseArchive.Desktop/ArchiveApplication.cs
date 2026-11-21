@@ -5,15 +5,18 @@ using Microsoft.Extensions.DependencyInjection;
 namespace EclipseArchive.Desktop;
 
 internal sealed record DesktopLaunchOptions(int? FrameLimit, string InitialPath, IReadOnlyList<string> ArchivePaths,
-    ArchiveShellRequest? ShellRequest = null, bool OpenSettings = false);
+    ArchiveShellRequest? ShellRequest = null, bool OpenSettings = false, bool CreateArchive = false);
 
 public sealed class ArchiveApplication : Application
 {
     public override void OnFrameworkInitializationCompleted()
     {
         var options = Services.GetRequiredService<DesktopLaunchOptions>();
+        var appearance = Services.GetRequiredService<ArchiveAppearance>();
         var window = new MainWindow
         {
+            Appearance = appearance,
+            Theme = appearance,
             ApplyTheme = SetTheme,
             Engine = Services.GetRequiredService<IArchiveEngine>(),
             FileService = Services.GetRequiredService<ArchiveFileService>(),
@@ -21,7 +24,9 @@ public sealed class ArchiveApplication : Application
             Desktop = Services.GetRequiredService<IDesktopServices>(),
             ShellIntegration = Services.GetService<IShellIntegrationService>(),
             ShellRequestDecoder = OperatingSystem.IsMacOS() ? new MacFinderRequestFile().ReadIfRequest : null,
-            OperationOnly = options.ShellRequest?.Action is { } action && action != ArchiveShellAction.Open,
+            OperationOnly = options.CreateArchive || options.ShellRequest?.Action is { } action && action != ArchiveShellAction.Open,
+            StartCreating = options.CreateArchive,
+            ArchiveWindows = new DesktopArchiveWindows(),
             InitialPath = options.InitialPath,
             MaxTicks = options.FrameLimit,
             CloseOnEscape = false,

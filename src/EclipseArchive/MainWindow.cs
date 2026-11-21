@@ -17,6 +17,8 @@ public partial class MainWindow
     [UiParameter] public string InitialPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     [UiParameter] public bool OperationOnly { get; set; }
     public IArchiveOperationWindows? OperationWindows { get; set; }
+    public IArchiveWindows? ArchiveWindows { get; set; }
+    [UiParameter] public bool StartCreating { get; set; }
 
     private Grid RootGrid = null!;
     private ArchiveSurface DialogOverlay = null!;
@@ -61,6 +63,17 @@ public partial class MainWindow
     private string[] CompressionLevelNames => SelectedFormat == ArchiveFormat.SevenZip ? _sevenZipLevels : _zipLevels;
     private int _compressionLevelIndex = 3, _zipEncryptionIndex, _extractPathIndex = 1;
     private string _passwordConfirm = "";
+    private bool _showCreatePassword;
+    private string CompressionMethodName => SelectedFormat switch
+    {
+        ArchiveFormat.Zip => _compressionLevelIndex == 0 ? "存储" : "Deflate",
+        ArchiveFormat.SevenZip => "LZMA2",
+        ArchiveFormat.Tar => "存储",
+        ArchiveFormat.TarGZip or ArchiveFormat.GZip => "Deflate",
+        ArchiveFormat.TarBZip2 or ArchiveFormat.BZip2 => "BZip2",
+        ArchiveFormat.TarLZip or ArchiveFormat.LZip => "LZMA",
+        _ => "Zstandard",
+    };
     private string[] _sources = [];
     private string[]? _extractEntries;
     private BrowserItem? _passwordEntry;
@@ -151,6 +164,8 @@ public partial class MainWindow
         base.OnInitialized();
         _browser = new BrowserService(Engine);
         InitializePane(RightPane);
+        _acceptingInitialRequests = false;
+        if (StartCreating) PrepareCreate();
         foreach (var command in RootGrid.Descendants().OfType<ArchiveCommand>().Where(command => !command.ShowLabel).ToArray())
         {
             var text = new TextBlock { FontSize = 12, Padding = 7 }; text.AddRun(command.Label);
@@ -420,7 +435,11 @@ public partial class MainWindow
         try
         {
             var file = await ShowPickerAsync(Desktop.ChooseArchive);
-            if (!_disposed && file is not null) await TryOpenArchiveAsync(file);
+            if (!_disposed && file is not null)
+            {
+                if (ArchiveWindows is not null) ArchiveWindows.Open(file);
+                else await TryOpenArchiveAsync(file);
+            }
         }
         catch (Exception error) { if (!_disposed) ReportError(error); }
     }
@@ -459,6 +478,17 @@ public partial class MainWindow
     private void SelectAll() { if (VisibleItems.Count > 0) { Files.Selection.Select(0); Files.Selection.Select(VisibleItems.Count - 1, extend: true); } }
     private void DismissError() { _error = ""; Invalidate(); }
 
+    private void ChooseCreate()
+    {
+        if (_busy || _pickerBusy) return;
+        try
+        {
+            if (ArchiveWindows is not null) ArchiveWindows.Create(InitialPath);
+            else PrepareCreate();
+        }
+        catch (Exception error) { ReportError(error); }
+    }
+
     private void PrepareCreate()
     {
         if (_busy) return;
@@ -470,6 +500,7 @@ public partial class MainWindow
             _panel = DialogKind.AddToArchive; Invalidate(); return;
         }
         _sources = [];
+        _showCreatePassword = false;
         _formatIndex = 0; _compressionLevelIndex = 3; _zipEncryptionIndex = 0; _password = ""; _passwordConfirm = ""; _encryptNames = false; _dialogError = "";
         var folder = Directory.Exists(InitialPath) ? InitialPath : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _destination = _suggestedDestination = UniqueDestination(folder, "Archive", ".zip");
@@ -786,8 +817,7 @@ public partial class MainWindow
     }
     private void CycleTheme()
     {
-        SetSelectedTheme(_theme switch { ThemeVariant.System => ThemeVariant.Light, ThemeVariant.Light => ThemeVariant.Dark, _ => ThemeVariant.System });
-        if (!IsDisposed && Theme is { } theme) ApplyTheme(theme);
+        SetSelectedTheme((Appearance?.Variant ?? _theme) switch { ThemeVariant.System => ThemeVariant.Light, ThemeVariant.Light => ThemeVariant.Dark, _ => ThemeVariant.System });
     }
     private static string ArchiveBaseName(string path)
     {
