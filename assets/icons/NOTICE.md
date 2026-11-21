@@ -1,4 +1,4 @@
-# NanaZip application icon
+# BubuZip application icon attribution
 
 Copyright (c) Shomnipotence and M2-Team. All rights reserved.
 
@@ -11,6 +11,7 @@ Attribution-NoDerivatives 4.0 International license (CC BY-ND 4.0).
 - macOS artwork: Assets/OriginalAssets/NanaZip/Standard/Standard_{16,32,64,128,256,512,1024}.png.
 - License: https://creativecommons.org/licenses/by-nd/4.0/
 
-NanaZip.icns packages the original PNG resolutions with Apple's iconutil.
+The local BubuZip.ico is an unchanged copy of the upstream Windows icon.
+BubuZip.icns packages the original PNG resolutions with Apple's iconutil.
 The artwork, colors and image dimensions are unchanged.
 The upstream license is preserved in NanaZip.License.md.

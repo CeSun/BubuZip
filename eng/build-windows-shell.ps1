@@ -31,7 +31,7 @@ $manifest = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'windows-shell/AppxM
 $manifest = $manifest.Replace('@ARCH@', $Architecture).Replace('@PUBLISHER@', [Security.SecurityElement]::Escape($Publisher))
 [IO.File]::WriteAllText((Join-Path $layout 'AppxManifest.xml'), $manifest)
 Add-Type -AssemblyName System.Drawing
-$icon = [Drawing.Icon]::new((Join-Path $root 'assets/icons/NanaZip.ico'), 256, 256)
+$icon = [Drawing.Icon]::new((Join-Path $root 'assets/icons/BubuZip.ico'), 256, 256)
 $bitmap = $icon.ToBitmap()
 try {
     foreach ($asset in @(@('StoreLogo', 50), @('Square44x44Logo', 44), @('Square150x150Logo', 150))) {

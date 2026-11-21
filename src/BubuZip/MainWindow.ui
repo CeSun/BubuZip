@@ -1,0 +1,262 @@
+@namespace BubuZip
+@using EclipseUI
+@using EclipseUI.Elements
+
+<Window Title={OperationOnly ? "BubuZip · " + DialogTitle : "BubuZip"} Width={OperationOnly ? _panel == DialogKind.Create ? 900 : 560 : 1000} Height={OperationOnly ? _panel == DialogKind.Create ? 740 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
+    <ArchiveSurface Ref={RootGrid} Style="Background: theme(#1C2233, #F0F4F9)">
+        <ArchiveSurface IsVisible={!OperationOnly} IsEnabled={_panel == DialogKind.None && !_pickerBusy && !_busy}>
+            <ArchiveSurface IsVisible={!_showBrowser}>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Gap="22" MaxWidth="560" Margin="24">
+                    <ArchiveWelcomeIcon HorizontalAlignment="Center" />
+                    <TextBlock FontSize="30" HorizontalAlignment="Center">BubuZip</TextBlock>
+                    <TextBlock FontSize="14" HorizontalAlignment="Center" Style="Foreground: theme(#FFFFFFB8, #00000099)">轻松创建和打开压缩包</TextBlock>
+                    <WrapPanel Gap="16" HorizontalAlignment="Center">
+                        <Button Ref={HomeCreateButton} Width="200" Height="52" OnClick={ChooseCreate} IsEnabled={!_busy}>新建压缩</Button>
+                        <Button Width="200" Height="52" OnClick={ChooseAndOpen} IsEnabled={!_busy}>打开压缩</Button>
+                    </WrapPanel>
+                    <Button HorizontalAlignment="Center" OnClick={ShowOptions} IsEnabled={!_busy}>设置</Button>
+                    @if (StatusMessage != "就绪") {
+                        <TextBlock FontSize="13" HorizontalAlignment="Center" TextWrapping="Wrap">{StatusMessage}</TextBlock>
+                    }
+                </StackPanel>
+            </ArchiveSurface>
+            <ArchiveSurface IsVisible={_showBrowser} RowDefinitions="48,*,Auto" IsEnabled={!_busy}>
+                <ArchiveSurface ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Margin="4" OnClick={ReturnHome}>返回首页</Button>
+                        <ArchiveSeparator />
+                        <ArchiveCommand Symbol="Add" Label="添加" OnClick={PrepareCreate} IsEnabled={CanAdd} />
+                        <ArchiveCommand Symbol="Extract" Label="提取" OnClick={PrepareExtract} IsEnabled={CanExtract} />
+                        <ArchiveCommand Symbol="Test" Label="测试" OnClick={PrepareTest} IsEnabled={CanExtract} />
+                        <ArchiveSeparator />
+                        <ArchiveCommand Symbol="Copy" Label="复制" OnClick={CopySelected} IsEnabled={CanCopy} />
+                        <ArchiveCommand Symbol="Delete" Label="删除" OnClick={TrashSelected} IsEnabled={CanDelete} />
+                        <ArchiveCommand Symbol="Info" Label="信息" OnClick={ShowProperties} IsEnabled={HasSelection} />
+                        <ArchiveSeparator />
+                        <ArchiveCommand Ref={MoreButton} Symbol="More" Label="更多" OnClick={ShowMore} />
+                    </StackPanel>
+                    <Button Grid.Column="1" Margin="6" Height="32" OnClick={ChooseAndOpen}>打开压缩包…</Button>
+                </ArchiveSurface>
+                <ArchivePane Grid.Row="1" Ref={RightPane} UpRequested={() => PaneUp(RightPane)} SortRequested={column => PaneSort(RightPane, column)} />
+                <TextBlock Grid.Row="2" Margin="8" FontSize="12">{StatusMessage}</TextBlock>
+            </ArchiveSurface>
+            @if (_error.Length > 0) {
+                <ArchiveSurface VerticalAlignment="Bottom" ColumnDefinitions="*,Auto" Padding="10" Gap="8" Style="Background: theme(#342626, #FFF2F2)">
+                    <TextBlock TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{_error}</TextBlock>
+                    <Button Grid.Column="1" OnClick={DismissError}>关闭</Button>
+                </ArchiveSurface>
+            }
+        </ArchiveSurface>
+        <ContextMenu Ref={MainMenu} PlacementTarget={MoreButton} Placement="Bottom">
+            <MenuItem Label="文件">
+                <Slot Name="Submenu"><ContextMenu>
+                    <MenuItem Label="打开压缩包…" OnClick={ChooseAndOpen} />
+                    <MenuItem Label="打开所选项目    Enter" OnClick={OpenSelected} />
+                    <MenuItem Label="添加到压缩包…" OnClick={PrepareCreate} IsEnabled={CanAdd} />
+                    <MenuItem Label="提取…" OnClick={PrepareExtract} IsEnabled={CanExtract} />
+                    <MenuItem Label="测试压缩包" OnClick={PrepareTest} IsEnabled={CanExtract} />
+                    <MenuItem Label="返回首页" OnClick={ReturnHome} />
+                </ContextMenu></Slot>
+            </MenuItem>
+            <MenuItem Label="编辑">
+                <Slot Name="Submenu"><ContextMenu>
+                    <MenuItem Label="全选" OnClick={SelectAll} />
+                    <MenuItem Label="提取所选项目…" OnClick={CopySelected} IsEnabled={CanCopy} />
+                    <MenuItem Label="从压缩包删除…" OnClick={TrashSelected} IsEnabled={CanDelete} />
+                    <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
+                    <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
+                </ContextMenu></Slot>
+            </MenuItem>
+            <MenuItem Label="查看">
+                <Slot Name="Submenu"><ContextMenu>
+                    <MenuItem Label="刷新" OnClick={Refresh} />
+                    <MenuItem Label="后退" OnClick={GoBack} IsEnabled={_history.Count > 0} />
+                    <MenuItem Label="切换明暗外观" OnClick={CycleTheme} />
+                </ContextMenu></Slot>
+            </MenuItem>
+            <MenuItem Label="工具">
+                <Slot Name="Submenu"><ContextMenu>
+                    <MenuItem Label="设置…" OnClick={ShowOptions} />
+                    <MenuItem Label="性能测试" OnClick={RunBenchmark} />
+                </ContextMenu></Slot>
+            </MenuItem>
+            <MenuItem Label="帮助" OnClick={ShowAbout} />
+        </ContextMenu>
+        <ContextMenu Target={RightPane.Files}>
+            <MenuItem Label="打开" OnClick={OpenSelected} />
+            <MenuItem Label="添加到压缩包…" OnClick={PrepareCreate} IsEnabled={CanAdd} />
+            <MenuItem Label="提取…" OnClick={PrepareExtract} IsEnabled={CanExtract} />
+            <MenuItem Label="提取所选项目…" OnClick={CopySelected} IsEnabled={CanCopy} />
+            <MenuItem Label="从压缩包删除…" OnClick={TrashSelected} IsEnabled={CanDelete} />
+            <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
+            <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
+        </ContextMenu>
+        <ArchiveDialogPopup Ref={CreatePopup} StaysOpen={_pickerBusy || _busy} OnClosed={CloseCreatePopup} />
+        <ArchiveSurface Ref={DialogOverlay} IsVisible={OperationOnly || _panel != DialogKind.None && !UsesCreatePopup} Style="Background: #00000066">
+            <ArchiveDialogBorder Ref={DialogFrame} UsePopupLayout={UsesCreatePopup} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : 560} MaxHeight={UsesCreatePopup ? 620 : double.PositiveInfinity} Margin={OperationOnly || UsesCreatePopup ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderColor="#80808060" Style="Background: theme(#1C2233, #F0F4F9)">
+                <ArchiveSurface RowDefinitions="*,Auto">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Padding={_panel == DialogKind.Create ? 16 : 24} Gap={_panel == DialogKind.Create ? 16 : 14}>
+                        @if (_panel != DialogKind.Create || !OperationOnly) {
+                            <TextBlock FontSize={_panel == DialogKind.Create ? 16 : 22}>{DialogTitle}</TextBlock>
+                        }
+                        @if (_panel != DialogKind.Create) {
+                            <TextBlock FontSize="13" TextWrapping="Wrap">{DialogDescription}</TextBlock>
+                        }
+                        @if (_panel == DialogKind.Message) {
+                            <StackPanel Gap="4">
+                                @foreach (var line in _messageBody.Split('\n')) {
+                                    <TextBlock TextWrapping="Wrap">{line.Length == 0 ? " " : line}</TextBlock>
+                                }
+                            </StackPanel>
+                        }
+                        @if (_panel == DialogKind.AddToArchive) {
+                            <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
+                                <TextBlock TextWrapping="Wrap">{SourceSummary}</TextBlock>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Gap="8">
+                                    <Button OnClick={ChooseCreateInputs}>选择文件…</Button>
+                                    <Button IsVisible={_sources.Length > 0} OnClick={ClearCreateInputs}>清空</Button>
+                                </StackPanel>
+                            </ArchiveSurface>
+                        }
+                        @if (_panel == DialogKind.Create) {
+                            <ArchiveSurface ColumnDefinitions="72,*,64" Gap="8">
+                                <TextBlock FontSize="13" VerticalAlignment="Center">压缩包</TextBlock>
+                                <TextBox Grid.Column="1" @bind-Text={_destination} />
+                                <Button Grid.Column="2" OnClick={ChooseDestination}>浏览…</Button>
+                            </ArchiveSurface>
+                            <ArchiveFormColumns>
+                                <StackPanel Gap="16">
+                                    <ArchiveSurface ColumnDefinitions="112,*" Gap="8">
+                                        <TextBlock FontSize="13" VerticalAlignment="Center">压缩格式：</TextBlock>
+                                        <ComboBox Grid.Column="1" ItemsSource={_formatNames} @bind-SelectedIndex={FormatIndex} />
+                                    </ArchiveSurface>
+                                    @if (HasCompressionLevel) {
+                                        <ArchiveSurface ColumnDefinitions="112,*" Gap="8">
+                                            <TextBlock FontSize="13" VerticalAlignment="Center">压缩等级：</TextBlock>
+                                            <ComboBox Grid.Column="1" ItemsSource={CompressionLevelNames} @bind-SelectedIndex={_compressionLevelIndex} />
+                                        </ArchiveSurface>
+                                    }
+                                    <ArchiveSurface ColumnDefinitions="112,*" Gap="8">
+                                        <TextBlock FontSize="13" VerticalAlignment="Center">压缩方法：</TextBlock>
+                                        <Border Grid.Column="1" BorderColor="#80808040" Padding="8" Style="Background: theme(#333333, #F8F8F8)">
+                                            <TextBlock FontSize="13">{CompressionMethodName}</TextBlock>
+                                        </Border>
+                                    </ArchiveSurface>
+                                    <ArchiveGroupBox Header="压缩内容" Style="Background: theme(#1C2233, #F0F4F9)">
+                                        <StackPanel Gap="10">
+                                            <TextBlock FontSize="13" TextWrapping="Wrap">{SourceSummary}</TextBlock>
+                                            <WrapPanel Gap="8">
+                                                <Button OnClick={ChooseCreateInputs}>选择文件…</Button>
+                                                <Button IsVisible={_sources.Length > 0} OnClick={ClearCreateInputs}>清空</Button>
+                                            </WrapPanel>
+                                            @if (_sources.Length > 0) {
+                                                <StackPanel Gap="4">
+                                                    @foreach (var source in _sources.Take(3)) {
+                                                        <TextBlock FontSize="12" TextWrapping="Wrap">{System.IO.Path.GetFileName(source)}</TextBlock>
+                                                    }
+                                                </StackPanel>
+                                            }
+                                        </StackPanel>
+                                    </ArchiveGroupBox>
+                                    @if (SingleFileFormat) {
+                                        <TextBlock FontSize="12" TextWrapping="Wrap">此格式只能压缩一个文件；多个文件或文件夹请选择 TAR 组合格式。</TextBlock>
+                                    }
+                                </StackPanel>
+                                <StackPanel Gap="16">
+                                    <ArchiveSurface ColumnDefinitions="96,*" Gap="8">
+                                        <TextBlock FontSize="13" VerticalAlignment="Center">更新方式：</TextBlock>
+                                        <Border Grid.Column="1" BorderColor="#80808040" Padding="8" Style="Background: theme(#333333, #F8F8F8)">
+                                            <TextBlock FontSize="13">创建新压缩包</TextBlock>
+                                        </Border>
+                                    </ArchiveSurface>
+                                    <ArchiveGroupBox Header="选项" Style="Background: theme(#1C2233, #F0F4F9)">
+                                        <StackPanel Gap="6">
+                                            <TextBlock FontSize="12" TextWrapping="Wrap">保留源文件和文件夹结构。</TextBlock>
+                                            <TextBlock FontSize="12" TextWrapping="Wrap">已有同名压缩包不会被覆盖。</TextBlock>
+                                        </StackPanel>
+                                    </ArchiveGroupBox>
+                                    <ArchiveGroupBox Header="加密" Style="Background: theme(#1C2233, #F0F4F9)">
+                                        <StackPanel Gap="8">
+                                            @if (CanEncryptNewArchive) {
+                                                <TextBlock FontSize="13">输入密码：</TextBlock>
+                                                <ArchivePasswordBox @bind-Text={_password} ShowPassword={_showCreatePassword} />
+                                                <TextBlock FontSize="13">重新输入：</TextBlock>
+                                                <ArchivePasswordBox @bind-Text={_passwordConfirm} ShowPassword={_showCreatePassword} />
+                                                <CheckBox Width="112" HorizontalAlignment="Left" @bind-Checked={_showCreatePassword}>显示密码</CheckBox>
+                                                @if (_formatIndex == 0) {
+                                                    <ArchiveSurface ColumnDefinitions="80,*" Gap="8">
+                                                        <TextBlock FontSize="13" VerticalAlignment="Center">加密算法：</TextBlock>
+                                                        <ComboBox Grid.Column="1" ItemsSource={_zipEncryptionNames} @bind-SelectedIndex={_zipEncryptionIndex} />
+                                                    </ArchiveSurface>
+                                                    <TextBlock FontSize="12" TextWrapping="Wrap">{_zipEncryptionIndex == 1 ? "ZipCrypto 密码仅支持 ASCII 字符。" : "密码留空则不加密。"}</TextBlock>
+                                                }
+                                                @if (_formatIndex == 1) {
+                                                    <CheckBox Width="150" HorizontalAlignment="Left" @bind-Checked={_encryptNames}>加密文件名</CheckBox>
+                                                    <TextBlock FontSize="12">加密算法：AES-256</TextBlock>
+                                                }
+                                            } else {
+                                                <TextBlock FontSize="13" TextWrapping="Wrap">此格式不支持密码加密。</TextBlock>
+                                                <TextBlock FontSize="12" TextWrapping="Wrap">需要密码保护时，请选择 ZIP 或 7z。</TextBlock>
+                                            }
+                                        </StackPanel>
+                                    </ArchiveGroupBox>
+                                </StackPanel>
+                            </ArchiveFormColumns>
+                        }
+                        @if (_panel == DialogKind.Extract) {
+                            @if (_shellExtractHere) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">提取到压缩包所在目录；如有同名文件或文件夹，保留已有项目并报告冲突。</TextBlock>
+                            }
+                            <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
+                                <TextBlock>路径模式</TextBlock>
+                                <ComboBox Grid.Column="1" ItemsSource={_extractPathNames} @bind-SelectedIndex={_extractPathIndex} />
+                            </ArchiveSurface>
+                        }
+                        @if (_panel == DialogKind.AddToArchive) {
+                            <CheckBox Width="265" HorizontalAlignment="Left" @bind-Checked={_replaceExisting}>替换压缩包内的同名文件</CheckBox>
+                        }
+                        @if (_panel == DialogKind.DeleteEntries) {
+                            <StackPanel Gap="4">
+                                @foreach (var entry in _editEntries.Take(6)) {
+                                    <TextBlock TextWrapping="Wrap">{entry}</TextBlock>
+                                }
+                            </StackPanel>
+                        }
+                        @if (_panel == DialogKind.Rename) {
+                            <TextBlock>新名称</TextBlock>
+                            <TextBox @bind-Text={_newName} />
+                        }
+                        @if (_panel == DialogKind.Extract) {
+                            <TextBlock>{_panel == DialogKind.Create ? "压缩包路径" : _shellExtractHere ? "输出文件夹（不覆盖或合并已有项目）" : "输出文件夹（新建）"}</TextBlock>
+                            <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
+                                <TextBox @bind-Text={_destination} />
+                                <Button Grid.Column="1" OnClick={ChooseDestination}>浏览…</Button>
+                            </ArchiveSurface>
+                        }
+                        @if (_panel == DialogKind.Unlock || _panel == DialogKind.EntryPassword || _panel == DialogKind.Extract || _panel == DialogKind.Test || IsArchiveEditDialog) {
+                            <TextBlock>密码（无密码可留空）</TextBlock>
+                            <PasswordBox @bind-Text={_password} />
+                        }
+                        @if (_panel == DialogKind.Progress) {
+                            <ProgressBar Value={_progress} IsIndeterminate={_progress < 0} Height="8" />
+                            <TextBlock FontSize="12" TextWrapping="Wrap">{_progressText}</TextBlock>
+                        }
+                        @if (OperationOnly && _panel == DialogKind.None && TaskIsRunning) {
+                            <ProgressBar IsIndeterminate="true" Height="8" />
+                        }
+                        @if (_dialogError.Length > 0) {
+                            <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{_dialogError}</TextBlock>
+                        }
+                    </StackPanel>
+                    </ScrollViewer>
+                    <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,120,8,96" Padding="16" Style="Background: theme(#1C2233, #F0F4F9)">
+                        <Button Grid.Column="1" IsVisible={_panel != DialogKind.Progress && _panel != DialogKind.Message && _panel != DialogKind.None} OnClick={ConfirmDialog} IsEnabled={!_busy}>{_panel == DialogKind.Create && OperationOnly ? "确定" : DialogConfirmLabel}</Button>
+                        <Button Grid.Column="1" IsVisible={_panel == DialogKind.Progress && _operationSucceeded} OnClick={OpenResultFolder} IsEnabled={!_busy}>打开文件夹</Button>
+                        <Button Grid.Column="3" Ref={DialogDismissButton} OnClick={DismissDialog} IsEnabled={_panel != DialogKind.Progress || _operationSucceeded || !_cancelRequested}>{_operationSucceeded && _panel == DialogKind.Progress ? "确认" : _panel == DialogKind.Message ? "关闭" : "取消"}</Button>
+                    </ArchiveSurface>
+                </ArchiveSurface>
+            </ArchiveDialogBorder>
+        </ArchiveSurface>
+    </ArchiveSurface>
+</Window>

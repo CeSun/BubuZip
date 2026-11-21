@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>BubuZip</RootNamespace>
+    <AssemblyName>BubuZip.UI</AssemblyName>
+    <Description>BubuZip shared application UI.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../BubuZip.Core/BubuZip.Core.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Runtime/EclipseUI.Runtime.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering/EclipseUI.Rendering.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Themes.Fluent/EclipseUI.Themes.Fluent.csproj" />
+    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Compiler.Generator/EclipseUI.Compiler.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="**/*.ui;**/*.eustyle" />
+  </ItemGroup>
+</Project>

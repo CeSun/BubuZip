@@ -11,14 +11,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("eclipsearchive_package_macos", Path(__file__).with_name("package-macos.py"))
+spec = importlib.util.spec_from_file_location("bubuzip_package_macos", Path(__file__).with_name("package-macos.py"))
 packaging = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(packaging)
 
 
 def options(root, **overrides):
     values = dict(project=root / "Project with spaces/Archive.csproj", name="BubuZip",
-                  executable="BubuZip", bundle_id="io.eclipsearchive.app", version="0.1.0",
+                  executable="BubuZip", bundle_id="io.bubuzip.app", version="0.1.0",
                   output=root / "BubuZip.app", configuration="Release", rid="osx-arm64",
                   minimum_system_version="13.0", sign_identity="-", publish_dir=root / "publish",
                   library_dir=[], sdl_library=None, notary_profile=None, force=False, verify=None)
@@ -29,7 +29,7 @@ def options(root, **overrides):
 def write_app(app):
     (app / "Contents/Resources").mkdir(parents=True)
     with (app / "Contents/Info.plist").open("wb") as stream:
-        plistlib.dump({"CFBundleIdentifier": "io.eclipsearchive.app"}, stream)
+        plistlib.dump({"CFBundleIdentifier": "io.bubuzip.app"}, stream)
 
 
 def write_plugin(plugin):
@@ -37,16 +37,16 @@ def write_plugin(plugin):
     native.parent.mkdir(parents=True)
     native.write_bytes(b"fixture")
     with (plugin / "Contents/Info.plist").open("wb") as stream:
-        plistlib.dump({"CFBundleIdentifier": "io.eclipsearchive.app.finder", "CFBundleExecutable": "Finder",
+        plistlib.dump({"CFBundleIdentifier": "io.bubuzip.app.finder", "CFBundleExecutable": "Finder",
                       "NSExtension": {"NSExtensionPointIdentifier": "com.apple.FinderSync",
-                                      "NSExtensionPrincipalClass": "EclipseArchiveFinderSync"}}, stream)
+                                      "NSExtensionPrincipalClass": "BubuZipFinderSync"}}, stream)
 
 
 class MetadataTests(unittest.TestCase):
     def test_advertised_extensions_match_the_shared_reader_whitelist(self):
-        source = (packaging.ROOT / "src/EclipseArchive/IShellIntegrationService.cs").read_text()
+        source = (packaging.ROOT / "src/BubuZip/IShellIntegrationService.cs").read_text()
         whitelist = set(re.findall(r'"(\.[a-z0-9]+)"', source))
-        mapping = packaging.archive_metadata()["EclipseArchiveArchiveTypes"]
+        mapping = packaging.archive_metadata()["BubuZipArchiveTypes"]
         self.assertEqual(set(mapping), whitelist)
         self.assertEqual(len(mapping), 25)
         self.assertFalse(any(identifier.startswith("dyn.") for identifier in mapping.values()))
@@ -55,7 +55,7 @@ class MetadataTests(unittest.TestCase):
         metadata = packaging.archive_metadata()
         declarations = {item["UTTypeIdentifier"]: item for item in metadata["UTImportedTypeDeclarations"]}
         documents = {item["LSItemContentTypes"][0]: item for item in metadata["CFBundleDocumentTypes"]}
-        for extension, identifier in metadata["EclipseArchiveArchiveTypes"].items():
+        for extension, identifier in metadata["BubuZipArchiveTypes"].items():
             declaration = declarations[identifier]
             self.assertIn(extension[1:], declaration["UTTypeTagSpecification"]["public.filename-extension"])
             self.assertIn("public.archive", declaration["UTTypeConformsTo"])
@@ -65,7 +65,7 @@ class MetadataTests(unittest.TestCase):
         self.assertNotIn("UTExportedTypeDeclarations", metadata)
 
     def test_standard_types_and_aliases_remain_consistent(self):
-        mapping = packaging.archive_metadata()["EclipseArchiveArchiveTypes"]
+        mapping = packaging.archive_metadata()["BubuZipArchiveTypes"]
         self.assertEqual(mapping[".zip"], "public.zip-archive")
         self.assertEqual(mapping[".tgz"], "org.gnu.gnu-zip-tar-archive")
         for first, alias in ((".gz", ".gzip"), (".bz2", ".bzip2"), (".tbz", ".tbz2"), (".lz", ".lzip"), (".zst", ".zstd")):
@@ -74,9 +74,9 @@ class MetadataTests(unittest.TestCase):
     def test_private_finder_requests_are_owned_data_documents_not_archive_formats(self):
         archives = packaging.archive_metadata()
         metadata = packaging.bundle_metadata()
-        self.assertEqual(metadata["EclipseArchiveArchiveTypes"], archives["EclipseArchiveArchiveTypes"])
+        self.assertEqual(metadata["BubuZipArchiveTypes"], archives["BubuZipArchiveTypes"])
         self.assertEqual(metadata["UTImportedTypeDeclarations"], archives["UTImportedTypeDeclarations"])
-        self.assertNotIn("." + packaging.FINDER_REQUEST_EXTENSION, metadata["EclipseArchiveArchiveTypes"])
+        self.assertNotIn("." + packaging.FINDER_REQUEST_EXTENSION, metadata["BubuZipArchiveTypes"])
         self.assertEqual(len(metadata["CFBundleDocumentTypes"]), len(archives["CFBundleDocumentTypes"]) + 1)
         request = metadata["CFBundleDocumentTypes"][-1]
         self.assertEqual(request["LSItemContentTypes"], [packaging.FINDER_REQUEST_TYPE])
@@ -118,7 +118,7 @@ class MetadataTests(unittest.TestCase):
             path = app / "Contents/Info.plist"
             with path.open("rb") as stream:
                 info = plistlib.load(stream)
-            del info["EclipseArchiveArchiveTypes"][".zip"]
+            del info["BubuZipArchiveTypes"][".zip"]
             with path.open("wb") as stream:
                 plistlib.dump(info, stream)
             with self.assertRaisesRegex(ValueError, "document metadata"):
@@ -147,7 +147,7 @@ class MetadataTests(unittest.TestCase):
 
 class OrchestrationTests(unittest.TestCase):
     def test_upstream_command_cannot_notarize_or_replace_final_output(self):
-        root = Path("/tmp/Eclipse Archive $(literal)")
+        root = Path("/tmp/BubuZip $(literal)")
         selected = options(root, sign_identity="Developer ID Application: A $(literal)",
                            notary_profile="notary-profile", force=True,
                            library_dir=[str(root / "native libs")], sdl_library=root / "libSDL3.dylib")

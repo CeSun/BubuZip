@@ -2,22 +2,24 @@
 
 BubuZip 是独立的 .NET 10 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
 
-桌面可执行文件名为 `BubuZip`，macOS 包名为 `BubuZip.app`。源码工程、命名空间、`io.eclipsearchive.app` 等系统内部标识用于延续已有文件关联和访达扩展身份。
+解决方案、源码项目和命名空间统一使用 `BubuZip`。桌面可执行文件名为 `BubuZip`，共享 UI 程序集为 `BubuZip.UI`，避免与桌面入口的程序集同名。macOS 包名为 `BubuZip.app`，应用标识为 `io.bubuzip.app`，访达扩展为 `io.bubuzip.app.finder`。
+
+Windows 新注册使用 `BubuZip.Archive` 和 `Software\BubuZip`，兼容读取旧版默认关联及菜单所有权；注册菜单时仅迁移当前可执行文件拥有的旧菜单，不修改受保护的默认选择。外观设置原本已存于 `BubuZip` 目录，无需迁移。macOS 改变了应用及扩展身份，升级后需在设置中重新关联格式并启用新的 BubuZip 访达扩展；旧扩展可在系统设置中停用。旧版请求文档不会跨扩展容器读取。
 
 应用首页提供新建压缩、打开压缩和设置入口。选择压缩包后显示归档内容，归档浏览、SharpCompress 流式引擎、磁盘文件工作流、系统集成与跨平台桌面服务相互独立。
 
 ## 当前工程
 
 ```text
-EclipseArchive/
-├── EclipseArchive.slnx
+BubuZip/
+├── BubuZip.slnx
 ├── src/
-│   ├── EclipseArchive.Core/        流式引擎、磁盘文件服务与进度模型
-│   ├── EclipseArchive/             主窗口、文件列表与浏览服务
-│   └── EclipseArchive.Desktop/     跨平台入口、原生桌面服务与预览
+│   ├── BubuZip.Core/        流式引擎、磁盘文件服务与进度模型
+│   ├── BubuZip/             主窗口、文件列表与浏览服务
+│   └── BubuZip.Desktop/     跨平台入口、原生桌面服务与预览
 ├── tests/
-│   ├── EclipseArchive.Core.Tests/  引擎与文件服务测试
-│   └── EclipseArchive.Ui.Tests/    浏览和主窗口交互测试
+│   ├── BubuZip.Core.Tests/  引擎与文件服务测试
+│   └── BubuZip.Ui.Tests/    浏览和主窗口交互测试
 ├── external/
 │   └── EclipseUI/                  Git 子模块
 ├── eng/
@@ -26,17 +28,17 @@ EclipseArchive/
     └── architecture.md
 ```
 
-`src/EclipseArchive` 包含 `MainWindow.ui` 与对应交互代码、`FileListBox`、`BrowserService`，以及 `IDesktopServices` 接口。它引用 Core 和子模块中的 Runtime、Rendering、主题及 `.ui` 编译生成器。
+`src/BubuZip` 包含 `MainWindow.ui` 与对应交互代码、`FileListBox`、`BrowserService`，以及 `IDesktopServices` 接口。它引用 Core 和子模块中的 Runtime、Rendering、主题及 `.ui` 编译生成器。
 
 `ArchivePane` 保存当前归档的浏览快照、密码、排序、历史与选择。`MainWindow.NavigateToAsync` 拒绝本地目录；上一级在归档根目录停止，切换归档时清空历史，路径栏为只读，返回首页清空当前归档。后台操作及模态对话框期间禁止切换操作目标。`ArchiveControls` 提供跨平台矢量图标、平面命令按钮、只读路径栏和列分隔线。
 
 归档浏览界面的参考来自相邻 NanaZip 仓库的 `NanaZip.Modern/MainWindowToolBarPage.xaml`、`StatusBarTemplate.xaml` 和 `Documents/MainWindowLightMode.png`、`MainWindowDarkMode.png`。应用保留 BubuZip 名称和现有 ZIP/7z 能力，标题栏和文件选择由宿主操作系统提供。性能测试使用内存中的 4 MiB 数据执行 ZIP 压缩、解压并校验，数值不等同于 NanaZip 的 LZMA 基准。
 
-`src/EclipseArchive.Desktop` 是可执行项目，根据系统装配 Win32、Linux SDL3 或 macOS 宿主，以及 Vello 渲染、HarfBuzz 文本、主题和桌面服务。`MacDesktopServices` 通过 AppKit/Objective-C 提供原生面板及废纸篓，Cocoa 调用保持在主线程；`WindowsDesktopServices` 使用 Windows PowerShell 的 WinForms 文件面板、Win32 信息框和 Shell 回收站；`LinuxDesktopServices` 使用 `zenity`、`gio` 和 `xdg-open`。Windows 和 Linux 的选择面板在后台等待，界面线程继续处理窗口消息，面板打开期间禁止重复操作；macOS 原生面板继续运行在 Cocoa 主线程。外部程序参数通过参数数组传递，用户路径不会交给 shell 解释。Linux 窗口使用 Vulkan；Windows 和 macOS 使用 Sparse 软件栅格及系统图形表面。
+`src/BubuZip.Desktop` 是可执行项目，根据系统装配 Win32、Linux SDL3 或 macOS 宿主，以及 Vello 渲染、HarfBuzz 文本、主题和桌面服务。`MacDesktopServices` 通过 AppKit/Objective-C 提供原生面板及废纸篓，Cocoa 调用保持在主线程；`WindowsDesktopServices` 使用 Windows PowerShell 的 WinForms 文件面板、Win32 信息框和 Shell 回收站；`LinuxDesktopServices` 使用 `zenity`、`gio` 和 `xdg-open`。Windows 和 Linux 的选择面板在后台等待，界面线程继续处理窗口消息，面板打开期间禁止重复操作；macOS 原生面板继续运行在 Cocoa 主线程。外部程序参数通过参数数组传递，用户路径不会交给 shell 解释。Linux 窗口使用 Vulkan；Windows 和 macOS 使用 Sparse 软件栅格及系统图形表面。
 
 启动参数接受归档文件路径；`--path folder` 指定创建压缩包时的初始建议目录，不会浏览该目录；`--frames 3` 用于运行有限循环次数后退出；`--shot image.png` 导出离屏测试预览，不创建桌面窗口；`--settings` 进入设置，可与离屏预览组合。`--shell` 携带系统菜单操作及路径，参数经类型校验后转为 `ArchiveShellRequest`。
 
-构建入口为 `dotnet build EclipseArchive.slnx`，运行入口为 `dotnet run --project src/EclipseArchive.Desktop`，测试命令为 `dotnet test EclipseArchive.slnx`。窗口启动检查与 Core 行为测试分别验证应用入口和压缩引擎。
+构建入口为 `dotnet build BubuZip.slnx`，运行入口为 `dotnet run --project src/BubuZip.Desktop`，测试命令为 `dotnet test BubuZip.slnx`。窗口启动检查与 Core 行为测试分别验证应用入口和压缩引擎。
 
 ## 框架依赖
 
@@ -80,9 +82,9 @@ ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加�
 
 `WindowsShellIntegration` 仅在 HKCU 注册本应用 ProgID、Capabilities 和可用打开程序，再打开 Windows 默认应用页面让用户确认；不生成或覆盖受保护的 `UserChoice`。状态通过系统有效 ProgID 查询，区分候选注册与实际默认应用。菜单写在文件与目录的经典级联 shell verb 中，Windows 11 位于“显示更多选项”；当前采用单选模型，用户路径作为独立的引用参数传入可执行文件，卸载仅删除当前可执行文件拥有的菜单键。Windows 发布版之外的开发宿主不可注册。
 
-macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.app` 放入 `Contents/PlugIns/EclipseArchiveFinder.appex`。注册后必须由用户在系统扩展页面启用；扩展监控真实用户主目录与 `/Volumes`，菜单只在范围内显示。访达跨进程传递菜单时不保留任意 `representedObject`，因此菜单项用支持的 `tag` 编码操作和菜单上下文，点击时重新取得 Finder 选择；不依赖原菜单项实例或自定义对象。
+macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.app` 放入 `Contents/PlugIns/BubuZipFinder.appex`。注册后必须由用户在系统扩展页面启用；扩展监控真实用户主目录与 `/Volumes`，菜单只在范围内显示。访达跨进程传递菜单时不保留任意 `representedObject`，因此菜单项用支持的 `tag` 编码操作和菜单上下文，点击时重新取得 Finder 选择；不依赖原菜单项实例或自定义对象。
 
-扩展处于沙盒中，`NSWorkspace.OpenConfiguration.arguments` 会被系统忽略。操作通过私有请求文档交付：扩展在自身容器的应用支持目录写入受限权限、随机命名的 `.eclipsearchive-request`，再用 `NSWorkspace.open(_:withApplicationAt:configuration:)` 向包含它的应用发送标准文档打开事件。普通文件打开与请求文档均由应用层 SDL 文件事件监听接收；请求文档由 `MacFinderRequestFile` 解码为 `ArchiveShellRequest`，保留现有 UI 队列与后台流程。公开 CLI 及 Windows 注册表菜单继续使用 `--shell` 参数。
+扩展处于沙盒中，`NSWorkspace.OpenConfiguration.arguments` 会被系统忽略。操作通过私有请求文档交付：扩展在自身容器的应用支持目录写入受限权限、随机命名的 `.bubuzip-request`，再用 `NSWorkspace.open(_:withApplicationAt:configuration:)` 向包含它的应用发送标准文档打开事件。普通文件打开与请求文档均由应用层 SDL 文件事件监听接收；请求文档由 `MacFinderRequestFile` 解码为 `ArchiveShellRequest`，保留现有 UI 队列与后台流程。公开 CLI 及 Windows 注册表菜单继续使用 `--shell` 参数。
 
 请求文档单独声明为本应用拥有的私有数据类型，不加入 25 种归档格式关联列表，也不注册可从网页调用的 URL 操作协议。读取器只接受扩展私有目录中的直属请求，检查文件名、所有者、权限、链接、大小、时效、协议版本、操作白名单和路径；成功读取后删除，不能重放。来源不符、过期或不合法的请求不会执行。扩展写入和启动失败会记录日志并显示提示，主程序解码或执行失败沿用应用内错误显示。原生请求与解析测试不代替真实 Finder 点击验收；本机界面操作权限不可用时，应明确记录此验证范围。
 
@@ -90,7 +92,7 @@ macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.ap
 
 ## Core 与压缩引擎
 
-`src/EclipseArchive.Core` 定义 `IArchiveEngine`，由 `SharpCompressArchiveEngine` 实现。该项目不依赖 EclipseUI，压缩操作使用 SharpCompress 和 SharpZipLib 托管库，不调用压缩命令行工具，也不加载原生压缩库。
+`src/BubuZip.Core` 定义 `IArchiveEngine`，由 `SharpCompressArchiveEngine` 实现。该项目不依赖 EclipseUI，压缩操作使用 SharpCompress 和 SharpZipLib 托管库，不调用压缩命令行工具，也不加载原生压缩库。
 
 NuGet 版本固定为 `SharpCompress 0.51.0-beta.174`，不使用浮动版本。该包标记的仓库提交为 `b2fade6400cf6b3fe851c1fe9773f19b5b20a586`，对应官方 GitHub 的 `0.51.0-beta2`。NuGet 包版本与 GitHub 标签名称不同，升级时应同时核对包版本、仓库提交和行为测试。
 
@@ -114,16 +116,16 @@ NuGet 版本固定为 `SharpCompress 0.51.0-beta.174`，不使用浮动版本。
 
 `SharpCompressArchiveEngine` 同时实现可选的 `IBatchArchiveEngine`。批量目标由条目名与输出流工厂组成，引擎按需打开并释放每条输出流；源归档流保持打开。ZIP 复用同一个归档对象，7z/solid RAR 使用顺序 reader 保留解码字典并校验条目内容。文件服务保留整包安全预检，随后一次批量处理选中的文件；其他引擎实现可回退到单条接口。
 
-`tests/EclipseArchive.Core.Tests` 保存流式引擎和文件服务测试，`tests/EclipseArchive.Ui.Tests` 保存浏览和主窗口交互测试。
+`tests/BubuZip.Core.Tests` 保存流式引擎和文件服务测试，`tests/BubuZip.Ui.Tests` 保存浏览和主窗口交互测试。
 
 ## 磁盘文件工作流
 
 依赖方向为：
 
 ```text
-EclipseArchive.Desktop → macOS 平台
-EclipseArchive.Desktop → EclipseArchive → EclipseUI
-EclipseArchive → EclipseArchive.Core → SharpCompress
+BubuZip.Desktop → macOS 平台
+BubuZip.Desktop → BubuZip → EclipseUI
+BubuZip → BubuZip.Core → SharpCompress
 MacDesktopServices → IDesktopServices（定义于共享 UI）
 ```
 

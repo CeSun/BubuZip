@@ -20,7 +20,7 @@ struct FinderRequestTransportTests {
 
     static func main() throws {
         let files = FileManager.default
-        let root = files.temporaryDirectory.appendingPathComponent("EclipseArchive.FinderTests-" + UUID().uuidString, isDirectory: true)
+        let root = files.temporaryDirectory.appendingPathComponent("BubuZip.FinderTests-" + UUID().uuidString, isDirectory: true)
         try files.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? files.removeItem(at: root) }
 
@@ -51,7 +51,7 @@ struct FinderRequestTransportTests {
 
         let app = root.appendingPathComponent("含 空格的 BubuZip.app", isDirectory: true)
         let contents = app.appendingPathComponent("Contents", isDirectory: true)
-        let plugin = contents.appendingPathComponent("PlugIns/EclipseArchiveFinder.appex", isDirectory: true)
+        let plugin = contents.appendingPathComponent("PlugIns/BubuZipFinder.appex", isDirectory: true)
         try files.createDirectory(at: plugin, withIntermediateDirectories: true)
         let info: [String: Any] = ["CFBundleIdentifier": FinderRequestTransport.bundleIdentifier, "CFBundlePackageType": "APPL"]
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
@@ -62,7 +62,7 @@ struct FinderRequestTransportTests {
             _ = try FinderRequestTransport.containingApplication(extensionBundle: root)
         }
 
-        let requests = root.appendingPathComponent("Application Support/EclipseArchive/FinderRequests", isDirectory: true)
+        let requests = root.appendingPathComponent("Application Support/BubuZip/FinderRequests", isDirectory: true)
         let date = Date()
         var delivered: [URL] = []
         let transport = FinderRequestTransport(directory: requests, now: { date }, launch: { urls, target, configuration, completion in

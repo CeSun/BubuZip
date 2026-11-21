@@ -10,10 +10,10 @@ if [[ ! -f "$eclipse_root/eng/bundle_macos.py" ]]; then
 fi
 
 exec python3 "$project_root/eng/package-macos.py" \
-    --project "$project_root/src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj" \
+    --project "$project_root/src/BubuZip.Desktop/BubuZip.Desktop.csproj" \
     --name BubuZip \
     --executable BubuZip \
-    --bundle-id io.eclipsearchive.app \
+    --bundle-id io.bubuzip.app \
     --version 0.1.0 \
     --output "$project_root/out/macos/BubuZip.app" \
     "$@"

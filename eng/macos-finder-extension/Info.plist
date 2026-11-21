@@ -16,7 +16,7 @@
     <key>NSExtension</key>
     <dict>
         <key>NSExtensionPointIdentifier</key><string>com.apple.FinderSync</string>
-        <key>NSExtensionPrincipalClass</key><string>EclipseArchiveFinderSync</string>
+        <key>NSExtensionPrincipalClass</key><string>BubuZipFinderSync</string>
         <key>NSExtensionAttributes</key><dict/>
     </dict>
 </dict>

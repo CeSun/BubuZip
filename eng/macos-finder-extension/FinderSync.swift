@@ -3,8 +3,8 @@ import Darwin
 import FinderSync
 
 /// Finder supplies the selection; the application performs every archive operation.
-@objc(EclipseArchiveFinderSync)
-final class EclipseArchiveFinderSync: FIFinderSync {
+@objc(BubuZipFinderSync)
+final class BubuZipFinderSync: FIFinderSync {
     private let transport = FinderRequestTransport()
     private static let archiveExtensions: Set<String> = [
         "zip", "zipx", "7z", "rar", "tar", "gz", "gzip", "tgz", "bz2", "bzip2",
@@ -82,7 +82,7 @@ final class EclipseArchiveFinderSync: FIFinderSync {
             let controller = FIFinderSyncController.default()
             let paths = try command.paths(selected: controller.selectedItemURLs(), targeted: controller.targetedURL())
             let application = try FinderRequestTransport.containingApplication(
-                extensionBundle: Bundle(for: EclipseArchiveFinderSync.self).bundleURL)
+                extensionBundle: Bundle(for: BubuZipFinderSync.self).bundleURL)
             try transport.send(action: command.action, paths: paths, application: application) { error in
                 Self.reportFailure(error)
             }

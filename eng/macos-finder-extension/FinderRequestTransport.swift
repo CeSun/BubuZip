@@ -87,8 +87,8 @@ struct FinderArchiveRequest: Codable {
 final class FinderRequestTransport {
     static let maximumPaths = 256
     static let maximumBytes = 256 * 1024
-    static let documentExtension = "eclipsearchive-request"
-    static let bundleIdentifier = "io.eclipsearchive.app"
+    static let documentExtension = "bubuzip-request"
+    static let bundleIdentifier = "io.bubuzip.app"
 
     typealias Launcher = ([URL], URL, NSWorkspace.OpenConfiguration, @escaping (Error?) -> Void) -> Void
 
@@ -103,7 +103,7 @@ final class FinderRequestTransport {
              }
          }) {
         self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("EclipseArchive", isDirectory: true)
+            .appendingPathComponent("BubuZip", isDirectory: true)
             .appendingPathComponent("FinderRequests", isDirectory: true)
         self.now = now
         self.launch = launch

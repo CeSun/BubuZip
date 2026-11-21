@@ -2,6 +2,7 @@
 **/obj/
 out/
 TestResults/
+**/__pycache__/
 .idea/
 .vs/
 *.user

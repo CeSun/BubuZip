@@ -10,7 +10,7 @@ while [[ $# -gt 0 ]]; do
             if [[ $# -lt 2 ]]; then echo "Missing value for $1" >&2; exit 2; fi
             if [[ "$1" == "--rid" ]]; then rid="$2"; else output="$2"; fi
             shift 2 ;;
-        *) echo "Usage: $0 --rid osx-arm64|osx-x64 --output /path/EclipseArchiveFinder.appex" >&2; exit 2 ;;
+        *) echo "Usage: $0 --rid osx-arm64|osx-x64 --output /path/BubuZipFinder.appex" >&2; exit 2 ;;
     esac
 done
 case "$rid" in
@@ -20,12 +20,12 @@ case "$rid" in
 esac
 if [[ -z "$output" || "$output" != *.appex ]]; then echo "--output must end in .appex" >&2; exit 2; fi
 if [[ -e "$output" ]]; then echo "Output already exists: $output" >&2; exit 2; fi
-staging="$(mktemp -d "${TMPDIR:-/tmp}/eclipsearchive-finder.XXXXXX")"
+staging="$(mktemp -d "${TMPDIR:-/tmp}/bubuzip-finder.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
-xcodebuild -project "$source_root/FinderExtension.xcodeproj" \
-    -target EclipseArchiveFinder -configuration Release -quiet \
+xcodebuild -project "$source_root/BubuZipFinder.xcodeproj" \
+    -target BubuZipFinder -configuration Release -quiet \
     SDKROOT=macosx ARCHS="$arch" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
     SYMROOT="$staging/products" OBJROOT="$staging/objects" build
 mkdir -p "$(dirname "$output")"
-ditto "$staging/products/Release/EclipseArchiveFinder.appex" "$output"
+ditto "$staging/products/Release/BubuZipFinder.appex" "$output"
 echo "Built unsigned Finder extension: $output"

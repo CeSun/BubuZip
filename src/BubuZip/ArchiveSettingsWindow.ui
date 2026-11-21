@@ -1,0 +1,98 @@
+@namespace BubuZip
+@using EclipseUI
+@using EclipseUI.Elements
+
+<Window Title="BubuZip 设置" Width="720" Height="640" CloseOnEscape="true">
+    <ArchiveSurface RowDefinitions="*,Auto,Auto" Style="Background: theme(#1C2233, #F0F4F9)">
+        <TabControl Margin="12" HeaderHeight="36" HeaderPadding="18">
+            <TabItem Header="系统">
+                <Border BorderColor="#80808040" Style="Background: theme(#1C2233, #F0F4F9)">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Padding="16" Gap="12" IsEnabled={!_settingsBusy}>
+                            <TextBlock FontSize="14">文件格式关联</TextBlock>
+                            @if (ShellIntegration is not null) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">选择使用 BubuZip 打开的文件类型。</TextBlock>
+                                <Border BorderColor="#80808040" Padding="8" Style="Background: theme(#202020, #FFFFFF)">
+                                    <ArchiveAssociationFormatSelector Ref={_associationSelector} Choices={_associationFormats} SelectionChanged={AssociationFormatsChanged} />
+                                </Border>
+                                <WrapPanel Gap="8">
+                                    <Button OnClick={SelectAllAssociationFormats}>全选</Button>
+                                    <Button OnClick={ClearAssociationFormats}>取消全选</Button>
+                                    <Button OnClick={AssociateSelectedFormats} IsEnabled={SelectedAssociationCount > 0}>关联所选格式</Button>
+                                </WrapPanel>
+                                <ArchiveGroupBox Header="当前状态" Style="Background: theme(#1C2233, #F0F4F9)">
+                                    <StackPanel Gap="8">
+                                        <TextBlock FontSize="12" TextWrapping="Wrap">{AssociatedFormatText}</TextBlock>
+                                        <TextBlock FontSize="12" TextWrapping="Wrap">{AssociationStatusText}</TextBlock>
+                                        <Button HorizontalAlignment="Left" OnClick={RefreshSystemIntegration}>刷新状态</Button>
+                                    </StackPanel>
+                                </ArchiveGroupBox>
+                            } else {
+                                <TextBlock FontSize="13" TextWrapping="Wrap">当前平台暂不提供文件格式关联和系统右键菜单设置。</TextBlock>
+                            }
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </TabItem>
+            <TabItem Header="右键菜单">
+                <Border BorderColor="#80808040" Style="Background: theme(#1C2233, #F0F4F9)">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Padding="16" Gap="16" IsEnabled={!_settingsBusy}>
+                            <TextBlock FontSize="14">{SystemMenuTitle + "右键菜单"}</TextBlock>
+                            @if (ShellIntegration is not null) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">在系统文件管理器中使用 BubuZip 压缩和提取文件。</TextBlock>
+                                <ArchiveGroupBox Header="菜单命令" Style="Background: theme(#1C2233, #F0F4F9)">
+                                    <StackPanel Gap="10">
+                                        <TextBlock FontSize="13">打开压缩包</TextBlock>
+                                        <TextBlock FontSize="13" TextWrapping="Wrap">提取文件… / 提取到此处 / 提取到同名文件夹</TextBlock>
+                                        <TextBlock FontSize="13">测试压缩包</TextBlock>
+                                        <TextBlock FontSize="13" TextWrapping="Wrap">添加到压缩包… / 压缩为 ZIP / 压缩为 7z</TextBlock>
+                                    </StackPanel>
+                                </ArchiveGroupBox>
+                                <WrapPanel Gap="8">
+                                    <Button OnClick={RegisterSystemMenu}>注册右键菜单</Button>
+                                    <Button OnClick={UnregisterSystemMenu} IsEnabled={_integrationStatus?.MenuInstalled == true}>移除右键菜单</Button>
+                                </WrapPanel>
+                                <TextBlock FontSize="12" TextWrapping="Wrap">{MenuStatusText}</TextBlock>
+                            } else {
+                                <TextBlock FontSize="13" TextWrapping="Wrap">当前平台暂不提供系统右键菜单设置。</TextBlock>
+                            }
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </TabItem>
+            <TabItem Header="外观">
+                <Border BorderColor="#80808040" Style="Background: theme(#1C2233, #F0F4F9)">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Padding="16" Gap="16">
+                            <TextBlock FontSize="14">界面外观</TextBlock>
+                            <ArchiveGroupBox Header="颜色主题" Style="Background: theme(#1C2233, #F0F4F9)">
+                                <StackPanel Gap="12">
+                                    <ArchiveSurface ColumnDefinitions="96,*" Gap="12">
+                                        <TextBlock FontSize="13" VerticalAlignment="Center">外观：</TextBlock>
+                                        <ComboBox Grid.Column="1" MaxWidth="260" HorizontalAlignment="Left" ItemsSource={_themeNames} @bind-SelectedIndex={ThemeIndex} />
+                                    </ArchiveSurface>
+                                    <TextBlock FontSize="12" TextWrapping="Wrap">选择浅色、深色，或跟随系统的颜色设置。更改后立即生效。</TextBlock>
+                                </StackPanel>
+                            </ArchiveGroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </TabItem>
+        </TabControl>
+        <StackPanel Grid.Row="1" Margin="12" Gap="6">
+            @if (_settingsBusy) {
+                <TextBlock FontSize="12">正在处理系统设置…</TextBlock>
+            }
+            @if (_settingsFeedback.Length > 0) {
+                <TextBlock FontSize="12" TextWrapping="Wrap">{_settingsFeedback}</TextBlock>
+            }
+            @if (_settingsError.Length > 0) {
+                <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{_settingsError}</TextBlock>
+            }
+        </StackPanel>
+        <ArchiveSurface Grid.Row="2" ColumnDefinitions="*,96" Padding="12">
+            <Button Grid.Column="1" OnClick={Close}>关闭</Button>
+        </ArchiveSurface>
+    </ArchiveSurface>
+</Window>

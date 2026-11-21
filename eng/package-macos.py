@@ -14,17 +14,17 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 UPSTREAM = ROOT / "external/EclipseUI/eng/bundle_macos.py"
 FINDER_SOURCE = ROOT / "eng/macos-finder-extension"
-FINDER_NAME = "EclipseArchiveFinder.appex"
-FINDER_REQUEST_TYPE = "io.eclipsearchive.finder-request"
-FINDER_REQUEST_EXTENSION = "eclipsearchive-request"
+FINDER_NAME = "BubuZipFinder.appex"
+FINDER_REQUEST_TYPE = "io.bubuzip.finder-request"
+FINDER_REQUEST_EXTENSION = "bubuzip-request"
 ICON_ASSETS = ROOT / "assets/icons"
-ICON_NAME = "NanaZip.icns"
+ICON_NAME = "BubuZip.icns"
 
-# Imported declarations advertise existing formats; EclipseArchive never claims to own them.
+# Imported declarations advertise existing formats; BubuZip never claims to own them.
 # Standard identifiers match CoreServices. Aliases share one identifier and one declaration.
 ARCHIVE_TYPES = (
     ("public.zip-archive", "ZIP archive", ("zip",), "application/zip"),
-    ("io.eclipsearchive.archive.zipx", "ZIPX archive", ("zipx",), "application/x-zipx"),
+    ("io.bubuzip.archive.zipx", "ZIPX archive", ("zipx",), "application/x-zipx"),
     ("org.7-zip.7-zip-archive", "7z archive", ("7z",), "application/x-7z-compressed"),
     ("com.rarlab.rar-archive", "RAR archive", ("rar",), "application/vnd.rar"),
     ("public.tar-archive", "TAR archive", ("tar",), "application/x-tar"),
@@ -34,15 +34,15 @@ ARCHIVE_TYPES = (
     ("public.tar-bzip2-archive", "BZip2 TAR archive", ("tbz", "tbz2"), "application/x-bzip2-compressed-tar"),
     ("org.tukaani.xz-archive", "XZ archive", ("xz",), "application/x-xz"),
     ("org.tukaani.tar-xz-archive", "XZ TAR archive", ("txz",), "application/x-xz-compressed-tar"),
-    ("io.eclipsearchive.archive.lzip", "LZip archive", ("lz", "lzip"), "application/x-lzip"),
-    ("io.eclipsearchive.archive.tar-lzip", "LZip TAR archive", ("tlz",), "application/x-lzip-compressed-tar"),
-    ("io.eclipsearchive.archive.zstandard", "Zstandard archive", ("zst", "zstd"), "application/zstd"),
-    ("io.eclipsearchive.archive.tar-zstandard", "Zstandard TAR archive", ("tzst",), "application/x-zstd-compressed-tar"),
+    ("io.bubuzip.archive.lzip", "LZip archive", ("lz", "lzip"), "application/x-lzip"),
+    ("io.bubuzip.archive.tar-lzip", "LZip TAR archive", ("tlz",), "application/x-lzip-compressed-tar"),
+    ("io.bubuzip.archive.zstandard", "Zstandard archive", ("zst", "zstd"), "application/zstd"),
+    ("io.bubuzip.archive.tar-zstandard", "Zstandard TAR archive", ("tzst",), "application/x-zstd-compressed-tar"),
     ("public.z-archive", "Unix compress archive", ("z",), "application/x-compress"),
-    ("io.eclipsearchive.archive.tar-compress", "Unix compress TAR archive", ("taz",), "application/x-compressed-tar"),
-    ("io.eclipsearchive.archive.arc", "ARC archive", ("arc",), "application/x-arc"),
-    ("io.eclipsearchive.archive.arj", "ARJ archive", ("arj",), "application/x-arj"),
-    ("io.eclipsearchive.archive.ace", "ACE archive", ("ace",), "application/x-ace-compressed"),
+    ("io.bubuzip.archive.tar-compress", "Unix compress TAR archive", ("taz",), "application/x-compressed-tar"),
+    ("io.bubuzip.archive.arc", "ARC archive", ("arc",), "application/x-arc"),
+    ("io.bubuzip.archive.arj", "ARJ archive", ("arj",), "application/x-arj"),
+    ("io.bubuzip.archive.ace", "ACE archive", ("ace",), "application/x-ace-compressed"),
 )
 
 
@@ -77,7 +77,7 @@ def archive_metadata():
             "UTTypeTagSpecification": {"public.filename-extension": list(extensions), "public.mime-type": [mime]},
         })
     return {"CFBundleDocumentTypes": documents, "UTImportedTypeDeclarations": imported,
-            "EclipseArchiveArchiveTypes": mapping}
+            "BubuZipArchiveTypes": mapping}
 
 
 def bundle_metadata():
@@ -113,13 +113,13 @@ def configure_metadata(app, version, minimum_system_version):
         info = plistlib.load(stream)
     info.update(bundle_metadata())
     info["CFBundleIconFile"] = ICON_NAME
-    info["EclipseArchiveFinderExtensionIdentifier"] = info["CFBundleIdentifier"] + ".finder"
+    info["BubuZipFinderExtensionIdentifier"] = info["CFBundleIdentifier"] + ".finder"
     with info_path.open("wb") as stream:
         plistlib.dump(info, stream)
     extension_info = app / "Contents/PlugIns" / FINDER_NAME / "Contents/Info.plist"
     with extension_info.open("rb") as stream:
         plugin = plistlib.load(stream)
-    plugin["CFBundleIdentifier"] = info["EclipseArchiveFinderExtensionIdentifier"]
+    plugin["CFBundleIdentifier"] = info["BubuZipFinderExtensionIdentifier"]
     plugin["CFBundleVersion"] = plugin["CFBundleShortVersionString"] = version
     plugin["LSMinimumSystemVersion"] = minimum_system_version
     with extension_info.open("wb") as stream:
@@ -143,10 +143,10 @@ def verify_metadata(app):
     with (plugin_path / "Contents/Info.plist").open("rb") as stream:
         plugin = plistlib.load(stream)
     identifier = info["CFBundleIdentifier"] + ".finder"
-    if plugin.get("CFBundleIdentifier") != identifier or info.get("EclipseArchiveFinderExtensionIdentifier") != identifier:
+    if plugin.get("CFBundleIdentifier") != identifier or info.get("BubuZipFinderExtensionIdentifier") != identifier:
         raise ValueError("Finder extension identifier does not match its containing application")
     extension = plugin.get("NSExtension", {})
-    if extension.get("NSExtensionPointIdentifier") != "com.apple.FinderSync" or extension.get("NSExtensionPrincipalClass") != "EclipseArchiveFinderSync":
+    if extension.get("NSExtensionPointIdentifier") != "com.apple.FinderSync" or extension.get("NSExtensionPrincipalClass") != "BubuZipFinderSync":
         raise ValueError("Bundle is missing the expected Finder Sync extension entry point")
     executable = plugin.get("CFBundleExecutable", "")
     if not executable or Path(executable).name != executable or not (plugin_path / "Contents/MacOS" / executable).is_file():
@@ -238,7 +238,7 @@ def package(upstream, options):
     if options.publish_dir and output.parent.resolve().is_relative_to(options.publish_dir.expanduser().resolve()):
         raise ValueError("--output must be outside --publish-dir")
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".eclipsearchive-package-", dir=output.parent) as directory:
+    with tempfile.TemporaryDirectory(prefix=".bubuzip-package-", dir=output.parent) as directory:
         temporary = Path(directory)
         app = temporary / output.name
         run(*base_command(options, app))
@@ -254,15 +254,15 @@ def package(upstream, options):
             notarize_completed_bundle(app, options.notary_profile, temporary)
             verify_bundle(upstream, app, arch)
         replace_bundle(app, output, options.force)
-    print(f"Packaged {output} ({arch}, Finder extension and {len(archive_metadata()['EclipseArchiveArchiveTypes'])} archive extensions)")
+    print(f"Packaged {output} ({arch}, Finder extension and {len(archive_metadata()['BubuZipArchiveTypes'])} archive extensions)")
 
 
 def main(arguments=None):
     upstream = load_upstream()
     parser = upstream.parser()
     parser.description = __doc__
-    parser.set_defaults(project=str(ROOT / "src/EclipseArchive.Desktop/EclipseArchive.Desktop.csproj"),
-                        name="BubuZip", executable="BubuZip", bundle_id="io.eclipsearchive.app",
+    parser.set_defaults(project=str(ROOT / "src/BubuZip.Desktop/BubuZip.Desktop.csproj"),
+                        name="BubuZip", executable="BubuZip", bundle_id="io.bubuzip.app",
                         version="0.1.0", output=ROOT / "out/macos/BubuZip.app")
     package(upstream, parser.parse_args(arguments))
 

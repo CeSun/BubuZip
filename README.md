@@ -8,7 +8,9 @@
 
 应用图标使用 NanaZip 正式版原图，由 Shomnipotence 设计；来源及 CC BY-ND 4.0 许可见 [图标说明](assets/icons/NOTICE.md)。macOS 应用包和 Windows 可执行文件均包含对应格式的图标。
 
-构建入口为 `EclipseArchive.slnx`，生成的应用与可执行文件名称为 `BubuZip`（Windows 为 `BubuZip.exe`）。
+仓库为 [CeSun/BubuZip](https://github.com/CeSun/BubuZip)，构建入口为 `BubuZip.slnx`，生成的应用与可执行文件名称为 `BubuZip`（Windows 为 `BubuZip.exe`）。项目和命名空间统一使用 BubuZip，UI 程序集名为 `BubuZip.UI`。
+
+从旧项目名升级时，已有外观设置继续使用。Windows 保留已确认的旧版默认关联，并在重新注册菜单时迁移当前安装拥有的旧菜单；macOS 使用新的 `io.bubuzip.app` 应用身份，需要重新关联文件格式并在系统设置中启用新的 BubuZip 访达扩展。
 
 ## 当前功能
 
@@ -81,14 +83,14 @@ EclipseUI 位于 `external/EclipseUI`，来源为 <https://github.com/CeSun/Ecli
 在项目根目录执行：
 
 ```bash
-dotnet build EclipseArchive.slnx
-dotnet run --project src/EclipseArchive.Desktop
+dotnet build BubuZip.slnx
+dotnet run --project src/BubuZip.Desktop
 ```
 
 使用 `--create` 可直接打开新建压缩窗口。启动时可传入压缩包路径，直接打开并浏览内容（包含空格的路径请加引号）；多个压缩包各自使用独立窗口：
 
 ```bash
-dotnet run --project src/EclipseArchive.Desktop -- "/path/to/archive.zip"
+dotnet run --project src/BubuZip.Desktop -- "/path/to/archive.zip"
 ```
 
 支持在 Finder 或 Windows 资源管理器的“打开方式”中手动选择应用。macOS 在应用已经运行时，也能接收新的打开请求；正在操作或显示对话框时，请求会等待当前流程结束。加密压缩包会提示输入密码，无法读取的文件会在应用内显示错误。应用不会在启动时自动接管文件关联；可在“设置”中主动关联所选格式。
@@ -100,26 +102,26 @@ macOS 对带下载隔离标记、且保存了单文件“始终使用此应用�
 指定新建压缩包时的初始建议目录：
 
 ```bash
-dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads"
+dotnet run --project src/BubuZip.Desktop -- --path "$HOME/Downloads"
 ```
 
 运行解决方案中的测试：
 
 ```bash
-dotnet test EclipseArchive.slnx
+dotnet test BubuZip.slnx
 ```
 
 启动并运行有限帧数，用于检查应用窗口能否正常初始化和退出：
 
 ```bash
-dotnet run --project src/EclipseArchive.Desktop -- --frames 3
+dotnet run --project src/BubuZip.Desktop -- --frames 3
 ```
 
 导出离屏 PNG 预览，用于测试布局，不创建桌面窗口：
 
 ```bash
-dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --shot out/preview.png
-dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --shot out/preview-dark.png --dark
+dotnet run --project src/BubuZip.Desktop -- --path "$HOME/Downloads" --shot out/preview.png
+dotnet run --project src/BubuZip.Desktop -- --path "$HOME/Downloads" --shot out/preview-dark.png --dark
 ```
 
 离屏预览不打开桌面窗口；默认浅色，`--dark` 输出深色预览。有限帧启动与离屏预览分别用于检查窗口生命周期和布局；Core 与 UI 行为测试通过解决方案测试命令运行。窗口像素回归覆盖浅色、深色及 1 倍、2 倍设备缩放，检查连续帧和选择变化后的画面完整性与像素稳定性。
@@ -127,8 +129,8 @@ dotnet run --project src/EclipseArchive.Desktop -- --path "$HOME/Downloads" --sh
 可使用 .NET 发布 Windows 和 Linux 的自包含目录（在项目根目录运行，目标运行时也可选择对应的 `win-arm64` 或 `linux-arm64`）：
 
 ```bash
-dotnet publish src/EclipseArchive.Desktop -c Release -r win-x64 --self-contained true -o out/windows-x64
-dotnet publish src/EclipseArchive.Desktop -c Release -r linux-x64 --self-contained true -o out/linux-x64
+dotnet publish src/BubuZip.Desktop -c Release -r win-x64 --self-contained true -o out/windows-x64
+dotnet publish src/BubuZip.Desktop -c Release -r linux-x64 --self-contained true -o out/linux-x64
 ```
 
 Windows 11 一级右键菜单还需要原生扩展和稀疏身份包。在 Windows 上安装 Visual Studio C++ 工具、CMake 和 Windows SDK 后，用以下脚本发布完整目录（ARM64 使用 `-Architecture arm64`）：
@@ -161,7 +163,7 @@ Windows 11 一级右键菜单还需要原生扩展和稀疏身份包。在 Windo
 
 提取和测试类命令只针对归档显示，普通文件与文件夹提供压缩命令。快捷操作仍使用相同的后台进度、取消、密码输入和错误提示流程。
 
-macOS 应用包包含 `EclipseArchiveFinder.appex`。点击注册后会打开访达扩展管理页面，用户需要在系统设置中启用“BubuZip 菜单”；仅注册不等于已启用。启用后菜单作用于当前用户主目录和 `/Volumes` 下的磁盘，范围之外不显示。扩展通过系统文档打开事件把操作交给主程序，不依赖扩展启动参数；菜单操作各自打开一个应用窗口，也可在主程序运行时发起。临时请求仅从扩展的私有目录读取，校验后消费一次，过期或来源不符的请求不会执行。写入或启动失败会显示提示。点击“移除右键菜单”会停用扩展并移除其注册，保留应用包内的扩展，之后可重新注册。
+macOS 应用包包含 `BubuZipFinder.appex`。点击注册后会打开访达扩展管理页面，用户需要在系统设置中启用“BubuZip 菜单”；仅注册不等于已启用。启用后菜单作用于当前用户主目录和 `/Volumes` 下的磁盘，范围之外不显示。扩展通过系统文档打开事件把操作交给主程序，不依赖扩展启动参数；菜单操作各自打开一个应用窗口，也可在主程序运行时发起。临时请求仅从扩展的私有目录读取，校验后消费一次，过期或来源不符的请求不会执行。写入或启动失败会显示提示。点击“移除右键菜单”会停用扩展并移除其注册，保留应用包内的扩展，之后可重新注册。
 
 Windows 11 使用原生 `IExplorerCommand` 扩展和稀疏身份包，在一级右键菜单提供 BubuZip 子菜单；Windows 10 使用当前用户的经典级联菜单。当前支持单个文件或文件夹，多选时不显示。旧版用户需要更新完整发布目录后，再点击“注册右键菜单”；只有现代菜单注册成功才会移除当前安装拥有的经典菜单。系统缓存可能导致新菜单暂不显示，可重启资源管理器或注销后重新登录。注册必须从 Windows 发布版 `BubuZip.exe` 启动，不能从 `dotnet` 开发宿主注册。移除菜单只删除本应用当前可执行文件拥有的菜单和身份包注册，不修改文件关联。
 
@@ -170,13 +172,13 @@ Windows 11 使用原生 `IExplorerCommand` 扩展和稀疏身份包，在一级�
 可直接进入设置，或导出设置界面的离屏预览：
 
 ```bash
-dotnet run --project src/EclipseArchive.Desktop -- --settings
-dotnet run --project src/EclipseArchive.Desktop -- --settings --shot out/settings.png
+dotnet run --project src/BubuZip.Desktop -- --settings
+dotnet run --project src/BubuZip.Desktop -- --settings --shot out/settings.png
 ```
 
 ## Core 流式接口
 
-`IArchiveEngine` 与实现 `SharpCompressArchiveEngine` 位于 `src/EclipseArchive.Core`，不依赖 UI 框架。
+`IArchiveEngine` 与实现 `SharpCompressArchiveEngine` 位于 `src/BubuZip.Core`，不依赖 UI 框架。
 
 | 接口 | 用途 |
 |---|---|
@@ -223,11 +225,11 @@ dotnet run --project src/EclipseArchive.Desktop -- --settings --shot out/setting
 
 | 路径 | 用途 |
 |---|---|
-| `src/EclipseArchive.Core` | SharpCompress 流式引擎、磁盘文件工作流及进度模型，无 UI 依赖 |
-| `src/EclipseArchive` | 主窗口、文件列表、浏览服务、设置与桌面／系统集成接口 |
-| `src/EclipseArchive.Desktop` | 跨平台桌面入口、系统对话框、文件关联、系统菜单注册与离屏预览 |
-| `tests/EclipseArchive.Core.Tests` | 流式引擎与文件服务测试 |
-| `tests/EclipseArchive.Ui.Tests` | 文件浏览和主窗口交互测试 |
+| `src/BubuZip.Core` | SharpCompress 流式引擎、磁盘文件工作流及进度模型，无 UI 依赖 |
+| `src/BubuZip` | 主窗口、文件列表、浏览服务、设置与桌面／系统集成接口 |
+| `src/BubuZip.Desktop` | 跨平台桌面入口、系统对话框、文件关联、系统菜单注册与离屏预览 |
+| `tests/BubuZip.Core.Tests` | 流式引擎与文件服务测试 |
+| `tests/BubuZip.Ui.Tests` | 文件浏览和主窗口交互测试 |
 | `external/EclipseUI` | 固定提交的 EclipseUI Git 子模块 |
 | `eng/package-macos.sh` | 复用 EclipseUI 打包器的应用入口 |
 | `eng/macos-finder-extension` | 原生 Finder Sync 扩展及构建配置 |

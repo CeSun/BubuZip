@@ -1,0 +1,39 @@
+@namespace BubuZip
+@using EclipseUI
+@using EclipseUI.Elements
+
+<ArchiveSurface Ref={PaneRoot} RowDefinitions="32,*,32" Style="Background: theme(#1B2035, #FFFFFF); FontSize: 12">
+    <ArchiveSurface ColumnDefinitions="32,*" Style="Background: theme(#242A3A, #F8FAFD)">
+        <ArchiveCommand Ref={UpButton} Symbol="Up" Label="上一级" Width="32" Height="32" IsEnabled={CanGoUp} OnClick={() => UpRequested()} />
+        <Border Grid.Column="1" CornerRadius="3" BorderThickness="1" BorderColor="#8B8E9440">
+            <ArchiveSurface ColumnDefinitions="28,*">
+                <ArchiveGlyph Symbol={Snapshot?.ArchivePath is null ? ArchiveSymbol.Computer : ArchiveSymbol.Archive} HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <ArchiveAddressBox Grid.Column="1" Ref={Address} MinHeight="0" Height="30" IsReadOnly="true" Placeholder="" Style="Background: #00000000" />
+            </ArchiveSurface>
+        </Border>
+    </ArchiveSurface>
+    <Border Grid.Row="1" BorderThickness="1" CornerRadius="0" BorderColor="#8B8E94">
+        <ArchiveSurface RowDefinitions="26,*" ClipToBounds="true">
+            <ScrollViewer Ref={HeaderScroll} HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                <ArchiveSurface MinWidth="780" ColumnDefinitions="200,110,160,110,120,80" Style="Background: theme(#1E1E1E, #FFFFFF)">
+                    <ArchiveCommand ShowLabel="true" IsColumnHeader="true" Label={Header("名称", "name")} Width="200" Height="26" OnClick={() => SortRequested("name")} />
+                    <ArchiveCommand Grid.Column="1" ShowLabel="true" IsColumnHeader="true" Label={Header("大小", "size")} LabelAlignment="Right" Width="110" Height="26" OnClick={() => SortRequested("size")} />
+                    <ArchiveCommand Grid.Column="2" ShowLabel="true" IsColumnHeader="true" Label={Header("修改时间", "modified")} Width="160" Height="26" OnClick={() => SortRequested("modified")} />
+                    <ArchiveCommand Grid.Column="3" ShowLabel="true" IsColumnHeader="true" Label={Header("压缩后", "packed")} LabelAlignment="Right" Width="110" Height="26" OnClick={() => SortRequested("packed")} />
+                    <ArchiveCommand Grid.Column="4" ShowLabel="true" IsColumnHeader="true" Label={Header("类型", "type")} Width="120" Height="26" OnClick={() => SortRequested("type")} />
+                    <ArchiveCommand Grid.Column="5" ShowLabel="true" IsColumnHeader="true" Label={Header("属性", "attributes")} Width="80" Height="26" OnClick={() => SortRequested("attributes")} />
+                </ArchiveSurface>
+            </ScrollViewer>
+            <ArchiveColumnGuides Grid.Row="1" Ref={Guides} />
+            <ScrollViewer Grid.Row="1" Ref={FileScroll} HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <FileListBox Ref={Files} SelectionMode="Extended" MinWidth="780" />
+            </ScrollViewer>
+        </ArchiveSurface>
+    </Border>
+    <ArchiveSurface Grid.Row="2" ColumnDefinitions="*,8,100,8,40" Style="Background: theme(#1C2233, #F0F4F9)">
+        <TextBlock Margin="8" FontSize="12" VerticalAlignment="Center">{SelectionText}</TextBlock>
+        <ArchiveSeparator Grid.Column="1" Height="16" />
+        <TextBlock Grid.Column="2" FontSize="12" VerticalAlignment="Center">{SizeText}</TextBlock>
+        <ArchiveSeparator Grid.Column="3" Height="16" />
+    </ArchiveSurface>
+</ArchiveSurface>

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BubuZip.Core/BubuZip.Core.csproj" />
+    <Project Path="src/BubuZip/BubuZip.csproj" />
+    <Project Path="src/BubuZip.Desktop/BubuZip.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BubuZip.Core.Tests/BubuZip.Core.Tests.csproj" />
+    <Project Path="tests/BubuZip.Ui.Tests/BubuZip.Ui.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -8,7 +8,7 @@ target_compile_definitions(BubuZipShell PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_
 target_link_libraries(BubuZipShell PRIVATE shell32 shlwapi ole32)
 target_include_directories(BubuZipShell PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 # Keep archive filtering in sync with the application's supported formats.
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../../src/EclipseArchive/IShellIntegrationService.cs" FORMATS_SOURCE)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../../src/BubuZip/IShellIntegrationService.cs" FORMATS_SOURCE)
 string(REGEX MATCHALL "\"\\.[a-z0-9]+\"" FORMATS "${FORMATS_SOURCE}")
 list(TRANSFORM FORMATS PREPEND "L")
 list(JOIN FORMATS ", " FORMATS)
