@@ -8,6 +8,58 @@ public class ArchiveSurface : Grid
     public override void Render(IElementDrawingContext c) => c.FillRectangle(new(Point.Zero, FinalRect.Size), c.Background);
 }
 
+/// <summary>A dialog popup positioned in the center of its desktop owner.</summary>
+public sealed class ArchiveDialogPopup : Popup
+{
+    public ArchiveDialogPopup()
+    {
+        IsModal = true;
+        HostMode = PopupHostMode.Window;
+        Placement = Placement.Pointer;
+        CornerRadius = 8;
+    }
+
+    protected override Size MeasureCore(Size available)
+    {
+        ConstrainContent(OwnerSize());
+        return base.MeasureCore(available);
+    }
+
+    protected override void ArrangeCore(Rect final)
+    {
+        if (IsOpen && Content is { } content)
+        {
+            var owner = OwnerSize();
+            if (ConstrainContent(owner)) base.MeasureCore(owner);
+            var position = new Point(Math.Max(0, (owner.Width - content.DesiredSize.Width) / 2),
+                Math.Max(0, (owner.Height - content.DesiredSize.Height) / 2));
+            if (PointerPosition != position) PointerPosition = position;
+        }
+        base.ArrangeCore(final);
+    }
+
+    private Size OwnerSize()
+    {
+        Element root = this;
+        while (root.Parent is not null) root = root.Parent;
+        return new(root.FinalRect.Width > 0 ? root.FinalRect.Width : 480,
+            root.FinalRect.Height > 0 ? root.FinalRect.Height : 480);
+    }
+
+    private bool ConstrainContent(Size owner)
+    {
+        if (Content is not { } content) return false;
+        // Auto rows and columns can measure without a finite limit; an in-surface
+        // popup still fits its owner, while a native child can extend beyond it.
+        var width = IsWindowHosted ? 560 : Math.Min(560, owner.Width);
+        var height = IsWindowHosted ? 620 : Math.Min(620, owner.Height);
+        var changed = content.MaxWidth != width || content.MaxHeight != height;
+        content.MaxWidth = width;
+        content.MaxHeight = height;
+        return changed;
+    }
+}
+
 public sealed class ArchiveWelcomeIcon : Element
 {
     public ArchiveWelcomeIcon() { Width = 72; Height = 72; IsHitTestVisible = false; }
@@ -25,6 +77,21 @@ public sealed class ArchiveWelcomeIcon : Element
 /// <summary>A themed dialog surface; inline theme colors are supplied by the drawing context.</summary>
 public sealed class ArchiveDialogBorder : Border
 {
+    private bool _usePopupLayout;
+    public bool UsePopupLayout
+    {
+        get => _usePopupLayout;
+        set { if (_usePopupLayout == value) return; _usePopupLayout = value; InvalidateMeasure(); }
+    }
+
+    protected override Size MeasureCore(Size available)
+    {
+        if (!UsePopupLayout) return base.MeasureCore(available);
+        var constraint = new Size(Math.Min(560, available.Width), Math.Min(620, available.Height));
+        var desired = base.MeasureCore(constraint);
+        return new(constraint.Width, desired.Height);
+    }
+
     public override Rect? GetDrawingClip() => new(-8, -8, FinalRect.Width + 16, FinalRect.Height + 20);
 
     public override void Render(IElementDrawingContext c)

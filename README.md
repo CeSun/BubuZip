@@ -12,7 +12,7 @@
 
 ## 当前功能
 
-- “新建压缩”通过系统选择器添加源文件或文件夹并设置输出路径；“打开压缩”先选择压缩包，再显示其内容。
+- “新建压缩”使用独立的模态 Popup 设置压缩参数，通过系统选择器添加源文件或文件夹并设置输出路径；确认后显示独立进度窗口。“打开压缩”先选择压缩包，再显示其内容。
 - 归档浏览器提供添加、提取、测试、复制、删除、信息和返回首页；支持排序、多选、双击或 Enter 打开归档中的项目。选择其他压缩包可使用“打开压缩包…”或 Cmd/Ctrl+O。
 - 归档路径为只读；上一级、Backspace 和历史导航可在嵌套压缩包之间返回，在最外层归档根目录无法继续进入系统文件夹。返回首页会清除当前归档与导航历史。
 - 创建支持 ZIP、7z、TAR、TAR.GZ、TAR.BZ2、TAR.LZ、TAR.ZST，以及单文件 GZ、BZ2、LZ、ZST。ZIP/7z 可设置密码；ZIP 支持 AES-256 或 ZipCrypto（密码限 ASCII），7z 可加密文件名。
@@ -72,7 +72,7 @@ cd BubuZip
 git submodule update --init --recursive
 ```
 
-EclipseUI 位于 `external/EclipseUI`，来源为 <https://github.com/CeSun/EclipseUI.git>，当前固定提交为 `537f42f10307182cb6bb96e23aa019c3f5f19497`。主仓库记录具体子模块提交，构建使用该版本；应用不依赖相邻的 `../EclipseUI` 工作目录及其未提交修改。
+EclipseUI 位于 `external/EclipseUI`，来源为 <https://github.com/CeSun/EclipseUI.git>，当前固定提交为 `8883952554a6d56ab20360e61c29679b56c3df47`。主仓库记录具体子模块提交，构建使用该版本；应用不依赖相邻的 `../EclipseUI` 工作目录及其未提交修改。
 
 ## 构建与运行
 

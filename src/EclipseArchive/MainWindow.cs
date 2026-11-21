@@ -24,6 +24,7 @@ public partial class MainWindow
     private Button DialogDismissButton = null!;
     private Element? _focusBeforeDialog;
     private DialogKind _presentedPanel;
+    private bool _restoreDialogFocusPending;
     private ContextMenu MainMenu = null!;
     private ArchiveCommand MoreButton = null!;
     private ArchivePane RightPane = null!;
@@ -171,13 +172,20 @@ public partial class MainWindow
     protected override void OnUpdated()
     {
         base.OnUpdated();
-        if (_presentedPanel == _panel) return;
+        SynchronizeCreatePopup();
+        _createPopupClosedForOperation?.TrySetResult(true);
         var previous = _presentedPanel;
+        var changed = previous != _panel;
         _presentedPanel = _panel;
         if (_panel != DialogKind.None)
-            DialogDismissButton.RequestFocus();
-        else if (previous != DialogKind.None)
         {
+            if (changed) DialogDismissButton.RequestFocus();
+        }
+        else
+        {
+            if (previous != DialogKind.None) _restoreDialogFocusPending = true;
+            if (!_restoreDialogFocusPending || _busy) return;
+            _restoreDialogFocusPending = false;
             var prior = _focusBeforeDialog;
             _focusBeforeDialog = null;
             if (prior?.RequestFocus() != true)
@@ -633,7 +641,7 @@ public partial class MainWindow
             };
             var resultFolder = mode == DialogKind.Create ? Path.GetDirectoryName(destination) : mode == DialogKind.Extract ? destination : null;
             var completed = !OperationOnly && OperationWindows is not null && mode is DialogKind.Create or DialogKind.Extract or DialogKind.AddToArchive
-                ? RunOperationWindow(new(mode == DialogKind.Extract ? "正在解压" : "正在压缩",
+                ? await RunOperationWindowAsync(new(mode == DialogKind.Extract ? "正在解压" : "正在压缩",
                     mode == DialogKind.Create ? SourceSummary : OperationArchiveName, success,
                     async (reporter, token) =>
                     {
@@ -805,6 +813,7 @@ public partial class MainWindow
     protected override void OnDispose()
     {
         _disposed = true; _operationCancellation?.Cancel(); _lifetime.Cancel();
+        _createPopupClosedForOperation?.TrySetResult(false);
         try { _operations.StopAsync().GetAwaiter().GetResult(); }
         finally { ClearNestedArchives(); _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
     }

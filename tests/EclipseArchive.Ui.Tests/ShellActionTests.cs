@@ -119,7 +119,11 @@ public sealed class ShellActionTests
         var source = fixture.WriteFile("手动创建.txt", "manual payload");
         var presenter = new CapturingOperationWindows
         {
-            OnShow = _ => Assert.Empty(fixture.Elements<ProgressBar>()),
+            OnShow = _ =>
+            {
+                Assert.Empty(fixture.Elements<ProgressBar>());
+                Assert.All(fixture.Elements<ArchiveDialogPopup>(), popup => Assert.False(popup.IsOpen));
+            },
         };
         fixture.Desktop.Inputs = [source];
         fixture.Open(operationWindows: presenter);
@@ -139,9 +143,60 @@ public sealed class ShellActionTests
         Assert.Equal("压缩包创建完成。", fixture.Window.StatusMessage);
         Assert.Empty(fixture.Elements<ProgressBar>());
         Assert.DoesNotContain(fixture.VisibleButtons(), button => button.Label is "开始" or "确认");
+        Assert.Same(Assert.Single(fixture.VisibleButtons(), button => button.Label == "新建压缩"), fixture.Host.Focus.Focused);
         using var zip = ZipFile.OpenRead(destination);
         using var reader = new StreamReader(Assert.Single(zip.Entries).Open(), Encoding.UTF8);
         Assert.Equal("manual payload", reader.ReadToEnd());
+    }
+
+    [Fact]
+    public void ClosingTheOwnerWhileTheCreationPopupIsClosingDoesNotStartAnOperationWindow()
+    {
+        using var fixture = new ShellFixture();
+        var source = fixture.WriteFile("未开始.txt", "must not be written");
+        var presenter = new CapturingOperationWindows();
+        fixture.Desktop.Inputs = [source];
+        fixture.Open(operationWindows: presenter);
+        fixture.Click("新建压缩");
+        fixture.Click("选择文件…");
+        fixture.WaitForIdle();
+        var start = Assert.Single(fixture.VisibleButtons(), button => button.Label == "开始");
+
+        fixture.Click("开始");
+        start.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(fixture.Window.TaskIsRunning);
+        Assert.Empty(presenter.Operations);
+        var context = fixture.Host.SynchronizationContext!;
+        fixture.Window.Dispose();
+        context.Drain();
+
+        Assert.Empty(presenter.Operations);
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "未开始.zip")));
+    }
+
+    [Fact]
+    public void QueuedCompressionAfterEscapeWaitsForTheOldCreationPopupToFinishClosing()
+    {
+        using var fixture = new ShellFixture();
+        var source = fixture.WriteFile("排队.txt", "queued compression payload");
+        var presenter = new CapturingOperationWindows();
+        fixture.Open(operationWindows: presenter);
+        fixture.Click("新建压缩");
+
+        fixture.Host.Input.KeyPress(Key.Escape);
+        fixture.Host.Input.KeyRelease(Key.Escape);
+        fixture.Window.RequestShellAction(new(ArchiveShellAction.CompressZip, [source]));
+        fixture.Host.UpdateLayout();
+
+        Assert.True(fixture.Window.TaskIsRunning);
+        Assert.Empty(presenter.Operations);
+        Assert.All(fixture.Elements<ArchiveDialogPopup>(), popup => Assert.False(popup.IsOpen));
+        fixture.WaitForIdle();
+
+        Assert.Single(presenter.Operations);
+        Assert.Equal("压缩包创建完成。", fixture.Window.StatusMessage);
+        using var archive = ZipFile.OpenRead(Path.Combine(fixture.Root, "排队.zip"));
+        Assert.Equal("排队.txt", Assert.Single(archive.Entries).FullName);
     }
 
     [Fact]

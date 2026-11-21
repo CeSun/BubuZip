@@ -91,8 +91,9 @@
             <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
             <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
         </ContextMenu>
-        <ArchiveSurface Ref={DialogOverlay} IsVisible={OperationOnly || _panel != DialogKind.None} Style="Background: #00000066">
-            <ArchiveDialogBorder Ref={DialogFrame} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : 560} Margin={OperationOnly ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderColor="#80808060" Style="Background: theme(#2C2C2C, #FAFAFA)">
+        <ArchiveDialogPopup Ref={CreatePopup} StaysOpen={_pickerBusy || _busy} OnClosed={CloseCreatePopup} />
+        <ArchiveSurface Ref={DialogOverlay} IsVisible={OperationOnly || _panel != DialogKind.None && !UsesCreatePopup} Style="Background: #00000066">
+            <ArchiveDialogBorder Ref={DialogFrame} UsePopupLayout={UsesCreatePopup} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : 560} MaxHeight={UsesCreatePopup ? 620 : double.PositiveInfinity} Margin={OperationOnly || UsesCreatePopup ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderColor="#80808060" Style="Background: theme(#2C2C2C, #FAFAFA)">
                 <ArchiveSurface RowDefinitions="*,Auto">
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Padding="24" Gap="14">

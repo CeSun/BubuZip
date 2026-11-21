@@ -833,13 +833,42 @@ public sealed class MainWindowTests
         Assert.True(create.RequestFocus());
         fixture.Click("新建压缩");
         var frame = Assert.Single(fixture.Elements<ArchiveDialogBorder>());
+        var popup = Assert.Single(fixture.Elements<ArchiveDialogPopup>());
+        Assert.True(popup.IsModal && popup.IsOpen);
+        Assert.Equal(PopupHostMode.Window, popup.HostMode);
         Assert.Contains(fixture.Host.Focus.Focused, frame.Descendants());
+        Assert.False(create.RequestFocus());
         fixture.Host.Input.KeyPress(Key.Tab);
         Assert.Contains(fixture.Host.Focus.Focused, frame.Descendants());
         fixture.Host.Input.KeyPress(Key.Escape);
         fixture.Host.UpdateLayout();
+        fixture.Host.Input.KeyRelease(Key.Escape);
+        fixture.Host.UpdateLayout();
+        Assert.False(popup.IsOpen);
         Assert.DoesNotContain("添加到压缩包", fixture.Texts());
         Assert.Same(create, fixture.Host.Focus.Focused);
+    }
+
+    [Fact]
+    public void ClosingAFormatDropdownKeepsTheCreationPopupAndItsParametersOpen()
+    {
+        using var fixture = new WindowFixture();
+        fixture.OpenWindow();
+        fixture.Click("新建压缩");
+        var popup = Assert.Single(fixture.Elements<ArchiveDialogPopup>());
+        var format = fixture.Elements<ComboBox>().First();
+        format.IsDropDownOpen = true;
+        fixture.Host.UpdateLayout();
+        format.SelectedIndex = 1;
+        format.IsDropDownOpen = false;
+        fixture.Host.UpdateLayout();
+
+        Assert.True(popup.IsOpen);
+        Assert.Equal(1, format.SelectedIndex);
+        Assert.Contains("添加到压缩包", fixture.Texts());
+        Assert.True(fixture.FindButton("开始").IsEffectiveEnabled);
+        fixture.Click("取消");
+        Assert.False(popup.IsOpen);
     }
 
     [Fact]

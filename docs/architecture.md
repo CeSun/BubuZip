@@ -40,7 +40,7 @@ EclipseArchive/
 
 ## 框架依赖
 
-`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `537f42f10307182cb6bb96e23aa019c3f5f19497`。
+`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `8883952554a6d56ab20360e61c29679b56c3df47`。
 
 应用通过子模块内的项目引用使用框架。主仓库的子模块记录决定实际框架版本，构建与旁边的 EclipseUI 检出目录无关。这样不同开发者和构建环境可以还原相同依赖，也不会意外使用框架工作目录中的未提交修改。
 
@@ -55,6 +55,8 @@ git submodule update --init --recursive
 当前原生对话框由应用的桌面服务提供，EclipseUI 子模块保持独立。窗口、布局、输入和主题能力由框架提供，归档操作与文件管理交互由应用维护。
 
 应用使用的 EclipseUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`。Windows 和 macOS 使用软件栅格化并由对应平台的图形表面呈现；Linux 使用 Vulkan 后端。框架支持高斯阴影；应用自建主窗口和独立操作窗口均接入对应平台的原生弹出窗口工厂，下拉框和菜单默认使用独立的原生弹出窗口。
+
+“新建压缩”的参数界面使用 `Popup.IsModal` 原生子窗口；确认后先释放该窗口，再打开独立进度窗口。macOS 的原生模态使用 Cocoa 应用级会话，输入和焦点管理由 EclipseUI 负责。
 
 窗口像素回归使用真实 `MainWindow` 的布局与裁剪，分别覆盖浅色、深色以及 1 倍、2 倍设备缩放。每组检查首次绘制及选择变化前后的八个连续帧，断言背景无大面积透明缺失、重复状态的像素哈希一致；文字替身用于隔离系统字体差异。原生窗口启动检查另行验证 macOS 纹理呈现路径。
 

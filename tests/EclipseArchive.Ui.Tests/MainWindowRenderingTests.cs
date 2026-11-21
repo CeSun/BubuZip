@@ -16,7 +16,7 @@ public sealed class MainWindowRenderingTests
     [InlineData(true, 1000, 640)]
     [InlineData(false, 480, 320)]
     [InlineData(true, 480, 320)]
-    public void ModalDialogCoversWindowIsOpaqueAndKeepsActionsAccessible(bool dark, int width, int height)
+    public void CreationUsesAModalPopupWithOpaqueContentAndAccessibleActions(bool dark, int width, int height)
     {
         var directory = Path.Combine(Path.GetTempPath(), "EclipseArchive.Modal-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -48,30 +48,39 @@ public sealed class MainWindowRenderingTests
             root.Descendants().OfType<Button>().Single(button => button.Label == "新建压缩").Click();
             var after = Render();
             var frame = Assert.Single(root.Descendants().OfType<ArchiveDialogBorder>());
-            var overlay = Assert.IsType<ArchiveSurface>(frame.Parent);
-            Assert.True(overlay.IsVisible);
-            Assert.Equal(new Rect(0, 0, width, height), overlay.FinalRect);
-            Assert.InRange(Math.Abs(frame.FinalRect.X + frame.FinalRect.Width / 2 - width / 2d), 0, .01);
-            Assert.InRange(Math.Abs(frame.FinalRect.Y + frame.FinalRect.Height / 2 - height / 2d), 0, .01);
-            Assert.True(frame.FinalRect.Width <= width - 32);
-            Assert.True(frame.FinalRect.Height <= height - 32);
-            Assert.NotEqual(before.GetPixel(8, height - 8), after.GetPixel(8, height - 8));
+            var popup = Assert.Single(root.Descendants().OfType<ArchiveDialogPopup>());
+            Assert.True(popup.IsOpen);
+            Assert.True(popup.IsModal);
+            Assert.Equal(PopupHostMode.Window, popup.HostMode);
+            Assert.Same(frame, popup.Content);
+            var origin = frame.PointFromRoot(Point.Zero);
+            var bounds = new Rect(-origin.X, -origin.Y, frame.FinalRect.Width, frame.FinalRect.Height);
+            Assert.InRange(Math.Abs(bounds.X + bounds.Width / 2 - width / 2d), 0, .01);
+            Assert.InRange(Math.Abs(bounds.Y + bounds.Height / 2 - height / 2d), 0, .01);
+            Assert.True(bounds.Width <= width);
+            Assert.True(bounds.Height <= height);
+            if (!bounds.Contains(new Point(8, height - 8)))
+                Assert.Equal(before.GetPixel(8, height - 8), after.GetPixel(8, height - 8));
             Assert.Equal(dark ? new Color(44, 44, 44) : new Color(250, 250, 250),
-                after.GetPixel((int)frame.FinalRect.X + 12, (int)frame.FinalRect.Y + 12));
+                after.GetPixel((int)bounds.X + 12, (int)bounds.Y + 12));
             var start = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "开始");
             var cancel = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "取消");
             Assert.Equal(start.FinalRect.Y, cancel.FinalRect.Y);
             Assert.True(start.FinalRect.Right < cancel.FinalRect.X);
             Assert.True(start.IsEffectiveEnabled && cancel.IsEffectiveEnabled);
-            Assert.Contains(host.Input.HitTest(new Point(8, height - 8))!, overlay.Descendants().Prepend(overlay));
+            Assert.Null(host.Input.HitTest(new Point(bounds.Left - 1, bounds.Top - 1)));
+            var cancelOrigin = cancel.PointFromRoot(Point.Zero);
+            Assert.Contains(host.Input.HitTest(new Point(-cancelOrigin.X + cancel.FinalRect.Width / 2,
+                -cancelOrigin.Y + cancel.FinalRect.Height / 2))!, cancel.Descendants().Prepend(cancel));
             frame.Descendants().OfType<ComboBox>().First().SelectedIndex = 1;
             Render();
-            Assert.True(frame.FinalRect.Height <= height - 32);
+            Assert.True(frame.FinalRect.Height <= height);
             if (height == 320)
                 Assert.True(frame.Descendants().OfType<ScrollViewer>().First().ScrollableHeight > 0);
             Assert.True(start.IsEffectiveEnabled && cancel.IsEffectiveEnabled);
             cancel.Click(); Render();
-            Assert.False(overlay.IsVisible);
+            Assert.False(popup.IsOpen);
+            Assert.False(frame.IsEffectivelyVisible);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
