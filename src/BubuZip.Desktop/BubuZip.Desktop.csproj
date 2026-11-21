@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <OutputType Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-')) or ('$(RuntimeIdentifier)' == '' and '$(OS)' == 'Windows_NT')">WinExe</OutputType>
     <AssemblyName>BubuZip</AssemblyName>
     <AssemblyTitle>BubuZip</AssemblyTitle>
     <Product>BubuZip</Product>
