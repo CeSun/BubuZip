@@ -140,6 +140,7 @@ internal sealed class MacFinderRequestFile
         "open" => ArchiveShellAction.Open,
         "extract" => ArchiveShellAction.Extract,
         "extract-here" => ArchiveShellAction.ExtractHere,
+        "extract-smart" => ArchiveShellAction.ExtractSmart,
         "extract-folder" => ArchiveShellAction.ExtractFolder,
         "test" => ArchiveShellAction.Test,
         "compress" => ArchiveShellAction.Compress,

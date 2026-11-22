@@ -89,7 +89,7 @@ public sealed class WindowsShellIntegrationTests
         await service.RegisterMenuAsync();
 
         var commands = registry.Values.Where(pair => pair.Key.Path.EndsWith(@"\command", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(11, commands.Length); // Eight file actions and three directory compression actions.
+        Assert.Equal(12, commands.Length); // Nine file actions and three directory compression actions.
         foreach (var command in commands)
         {
             var value = Assert.IsType<string>(command.Value);
@@ -143,7 +143,7 @@ public sealed class WindowsShellIntegrationTests
 
         await service.RegisterMenuAsync();
 
-        foreach (var verb in new[] { "01open", "02extract", "03extract-here", "04extract-folder", "05test" })
+        foreach (var verb in new[] { "01open", "02extract", "03extract-here", "03extract-smart", "04extract-folder", "05test" })
         {
             var filter = registry.GetString(WindowsShellIntegration.FileMenu + @"\shell\" + verb, "AppliesTo");
             Assert.Contains("System.FileExtension:=\".zip\"", filter);

@@ -9,7 +9,9 @@ public sealed record ArchiveOperationSpec(
     string SuccessMessage,
     Func<IProgress<ArchiveOperationProgress>, CancellationToken, Task> Execute,
     string? ResultPath = null,
-    string? ResultFolder = null);
+    string? ResultFolder = null,
+    string? DisplayPath = null,
+    bool IsExtraction = false);
 
 public sealed record ArchiveOperationOutcome(bool Succeeded, bool Cancelled, string? Error);
 

@@ -1,0 +1,76 @@
+using EclipseUI.Elements;
+
+namespace BubuZip;
+
+public partial class MainWindow
+{
+    public Action? BackgroundOperationRequested { get; set; }
+    private ArchiveOperationSpec? _standaloneOperation;
+    private ArchiveOperationView? _standaloneOperationView;
+    private ContentControl StandaloneOperationHost = null!;
+    private string _standaloneOperationTitle = "";
+    private TaskCompletionSource<ArchiveOperationOutcome>? _standaloneOperationClosed;
+    private bool _standaloneOperationClosing;
+    private void MoveStandaloneOperationToBackground() => BackgroundOperationRequested?.Invoke();
+
+    private void UpdateStandaloneOperationTitle(string title)
+    {
+        _standaloneOperationTitle = title;
+        Title = title;
+    }
+
+    private void CloseStandaloneOperation(ArchiveOperationOutcome outcome) =>
+        _standaloneOperationClosed?.TrySetResult(outcome);
+
+    private async Task<bool> RunStandaloneOperationAsync(ArchiveOperationSpec operation, DialogKind returnPanel)
+    {
+        _busy = true;
+        _panel = DialogKind.None;
+        _dialogError = "";
+        _error = "";
+        _password = "";
+        _passwordConfirm = "";
+        _standaloneOperation = operation;
+        _standaloneOperationTitle = operation.Title;
+        var view = new ArchiveOperationView
+        {
+            Spec = operation,
+            Desktop = Desktop,
+            BackgroundRequested = MoveStandaloneOperationToBackground,
+            CanBackground = BackgroundOperationRequested is not null,
+            CloseRequested = CloseStandaloneOperation,
+            TitleChanged = UpdateStandaloneOperationTitle,
+        };
+        _standaloneOperationView = view;
+        var closed = new TaskCompletionSource<ArchiveOperationOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _standaloneOperationClosed = closed;
+        StandaloneOperationHost.Content = view;
+        Invalidate();
+        try
+        {
+            var result = await closed.Task;
+            if (_disposed) return false;
+            if (result.Succeeded)
+            {
+                StatusMessage = operation.SuccessMessage;
+                if (_openRequests.IsEmpty) ArchiveWindowClose.Request(this);
+                return true;
+            }
+            _panel = returnPanel;
+            if (result.Cancelled) StatusMessage = "操作已取消";
+            else _dialogError = result.Error ?? "操作未完成，请重试。";
+            return false;
+        }
+        finally
+        {
+            _standaloneOperationClosed = null;
+            _standaloneOperation = null;
+            _standaloneOperationView = null;
+            // ContentControl detaches caller-owned content; release the completed view here.
+            view.Dispose();
+            _standaloneOperationClosing = true;
+            _busy = false;
+            if (!_disposed) Invalidate();
+        }
+    }
+}

@@ -11,6 +11,102 @@ namespace BubuZip.Ui.Tests;
 
 public sealed class ArchiveOperationWindowTests
 {
+    [Theory]
+    [InlineData(680, 390, false)]
+    [InlineData(544, 312, false)]
+    [InlineData(680, 390, true)]
+    [InlineData(544, 312, true)]
+    public void DefaultClientAreaShowsAllStatisticsWithoutScrollingEvenWithLongPaths(int width, int height, bool completed)
+    {
+        using var entered = new ManualResetEventSlim();
+        var release = Signal();
+        var longPath = string.Join('/', Enumerable.Repeat("very-long-folder-name", 20)) + "/file.bin";
+        using var fixture = new OperationFixture(new ArchiveOperationSpec("正在解压", longPath, "提取完成。", async (progress, token) =>
+        {
+            progress.Report(new(longPath, 2, 5) { TotalBytes = 1000, ProcessedBytes = 400, CompressedBytes = 200 });
+            entered.Set();
+            await release.Task.WaitAsync(token).ConfigureAwait(false);
+        }, longPath, "/output", longPath, true));
+        fixture.Update();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        if (completed) { release.SetResult(); fixture.WaitForFinished(); }
+        var size = new Size(width, height);
+        fixture.Host.AvailableSize = size;
+        fixture.Update();
+        fixture.Window.Content!.Arrange(new Rect(Point.Zero, size));
+        Assert.Equal(0, Assert.Single(fixture.Elements<ScrollViewer>(), viewer => viewer.IsEffectivelyVisible).ScrollableHeight);
+        foreach (var label in new[] { "速度：", "总大小：", "已处理：", "压缩后大小：", "压缩率：" })
+        {
+            var block = Assert.Single(fixture.Elements<TextBlock>(), block => string.Concat(block.Runs.Select(run => run.Text)) == label);
+            var origin = block.PointFromRoot(Point.Zero);
+            Assert.InRange(-origin.Y + block.FinalRect.Height, 0, height - 50);
+        }
+        Assert.Contains(fixture.VisibleButtons(), button => button.Label == (completed ? "确认" : "取消"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PausedWorkStopsAtTheNextProgressBoundaryAndCanResumeOrCancel(bool cancel)
+    {
+        using var entered = new ManualResetEventSlim();
+        using var attempting = new ManualResetEventSlim();
+        using var passed = new ManualResetEventSlim();
+        var next = Signal();
+        using var fixture = new OperationFixture(new ArchiveOperationSpec("正在压缩", "大文件.bin", "压缩完成。", async (progress, token) =>
+        {
+            progress.Report(new("大文件.bin", 0, 1) { ProcessedBytes = 38 * 1024, TotalBytes = 100 * 1024, CompressedBytes = 24 * 1024 });
+            entered.Set();
+            await next.Task.WaitAsync(token).ConfigureAwait(false);
+            attempting.Set();
+            progress.Report(new("大文件.bin", 1, 1) { ProcessedBytes = 100 * 1024, TotalBytes = 100 * 1024 });
+            passed.Set();
+        }));
+        fixture.Update();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        fixture.Update();
+        Assert.Equal(38, Assert.Single(fixture.Elements<ProgressBar>()).Value);
+        Assert.Contains("100.00 KiB", fixture.Texts());
+        Assert.Contains("38.00 KiB", fixture.Texts());
+        Assert.Contains("24.00 KiB", fixture.Texts());
+        Assert.Contains("63 %", fixture.Texts());
+        fixture.Click("暂停");
+        Assert.Contains("已暂停", fixture.Texts());
+        next.SetResult();
+        Assert.True(attempting.Wait(TimeSpan.FromSeconds(5)));
+        Assert.False(passed.Wait(TimeSpan.FromMilliseconds(100)));
+        fixture.Click(cancel ? "取消" : "继续");
+        fixture.WaitForFinished();
+        Assert.Equal(cancel, fixture.Window.Result.Cancelled);
+        Assert.Equal(!cancel, fixture.Window.Result.Succeeded);
+        Assert.Equal(!cancel, passed.IsSet);
+    }
+
+    [Fact]
+    public void BackgroundActionKeepsTheOperationAliveAndNativeCloseCancelsPausedWork()
+    {
+        using var entered = new ManualResetEventSlim();
+        var next = Signal();
+        var backgroundCalls = 0;
+        using var fixture = new OperationFixture(new ArchiveOperationSpec("正在解压", "archive.zip", "完成", async (progress, token) =>
+        {
+            entered.Set();
+            await next.Task.WaitAsync(token).ConfigureAwait(false);
+            progress.Report(new("file.bin", 0, 1));
+        }));
+        fixture.Window.BackgroundRequested = () => backgroundCalls++;
+        fixture.Update();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        fixture.Click("后台");
+        Assert.Equal(1, backgroundCalls);
+        Assert.True(fixture.Window.TaskIsRunning);
+        fixture.Click("暂停");
+        next.SetResult();
+        fixture.Window.Dispose();
+        Assert.True(fixture.Window.Result.Cancelled);
+        Assert.False(fixture.Window.TaskIsRunning);
+    }
+
     [Fact]
     public void InitializationDoesNotStartTheOperationBeforeTheFirstHostedUpdate()
     {
@@ -51,7 +147,8 @@ public sealed class ArchiveOperationWindowTests
 
         Assert.Equal(40, Assert.Single(fixture.Elements<ProgressBar>()).Value);
         Assert.False(Assert.Single(fixture.Elements<ProgressBar>()).IsIndeterminate);
-        Assert.Contains("2 / 5  ·  目录/文件.txt", fixture.Texts());
+        Assert.Contains("2 / 5", fixture.Texts());
+        Assert.Contains("目录/文件.txt", fixture.Texts());
         Assert.DoesNotContain(fixture.VisibleButtons(), button => button.Label == "打开文件夹");
 
         release.SetResult();
@@ -239,7 +336,7 @@ public sealed class ArchiveOperationWindowTests
         {
             Window = new ArchiveOperationWindow { Spec = operation, Desktop = Desktop };
             Window.EnsureInitialized();
-            Host = new HeadlessRoot(Window) { AvailableSize = new Size(560, 300) };
+            Host = new HeadlessRoot(Window) { AvailableSize = new Size(680, 390) };
             Host.Content.SetThemeDefaults(FluentTheme.Light);
             _ui = Host.InstallSynchronizationContext();
         }

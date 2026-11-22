@@ -38,9 +38,9 @@ int main()
         assert(SUCCEEDED(enumerator->Clone(&clone)));
         assert(clone->Skip(ULONG_MAX) == S_FALSE);
         assert(enumerator->Reset() == S_OK);
-        IExplorerCommand* children[9]{};
+        IExplorerCommand* children[10]{};
         ULONG fetched = 0;
-        assert(enumerator->Next(9, children, &fetched) == S_FALSE && fetched == 8);
+        assert(enumerator->Next(10, children, &fetched) == S_FALSE && fetched == 9);
         auto temporary = std::filesystem::temp_directory_path() / (L"BubuZip shell test " + std::to_wstring(GetCurrentProcessId()));
         std::filesystem::create_directory(temporary);
         const auto zip = temporary / L"中文 & $ archive.ZIP";
@@ -52,9 +52,13 @@ int main()
         auto zipItems = Items(zip), plainItems = Items(plain), folderItems = Items(folder);
         for (ULONG i = 0; i < fetched; ++i) {
             assert(SUCCEEDED(children[i]->GetState(zipItems.Get(), FALSE, &state)) && state == ECS_ENABLED);
-            assert(SUCCEEDED(children[i]->GetState(plainItems.Get(), FALSE, &state)) && state == static_cast<EXPCMDSTATE>(i < 5 ? ECS_HIDDEN : ECS_ENABLED));
-            assert(SUCCEEDED(children[i]->GetState(folderItems.Get(), FALSE, &state)) && state == static_cast<EXPCMDSTATE>(i < 5 ? ECS_HIDDEN : ECS_ENABLED));
+            assert(SUCCEEDED(children[i]->GetState(plainItems.Get(), FALSE, &state)) && state == static_cast<EXPCMDSTATE>(actions[i].archiveOnly ? ECS_HIDDEN : ECS_ENABLED));
+            assert(SUCCEEDED(children[i]->GetState(folderItems.Get(), FALSE, &state)) && state == static_cast<EXPCMDSTATE>(actions[i].archiveOnly ? ECS_HIDDEN : ECS_ENABLED));
             assert(children[i]->Invoke(nullptr, nullptr) == E_INVALIDARG);
+            PWSTR title = nullptr;
+            assert(SUCCEEDED(children[i]->GetTitle(zipItems.Get(), &title)));
+            assert(std::wstring(title) == actions[i].title);
+            CoTaskMemFree(title);
             children[i]->Release();
         }
         // Windows command-line parsing must round-trip spaces, metacharacters, quotes and trailing slashes.

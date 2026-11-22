@@ -32,14 +32,9 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
             }
             ValidateEntryTree(inputs.Select(input => (input.EntryPath, input.IsDirectory)));
 
-            var completed = new HashSet<string>(StringComparer.Ordinal);
-            void Complete(string name)
-            {
-                lock (completed)
-                    if (completed.Add(name))
-                        progress?.Report(new(name, completed.Count, inputs.Count));
-            }
-            progress?.Report(new("", 0, inputs.Count));
+            var tracker = new ArchiveProgressTracker(progress, inputs.Count,
+                inputs.Where(input => !input.IsDirectory).Sum(input => new FileInfo(input.FilePath).Length), cancellationToken);
+            tracker.Report();
             var streams = new List<SourceFileStream>();
             var temporary = TemporarySibling(destination);
             try
@@ -49,12 +44,13 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
                     SourceFileStream? stream = null;
                     if (!input.IsDirectory)
                     {
-                        stream = new SourceFileStream(input.FilePath, () => Complete(input.EntryPath));
+                        stream = new SourceFileStream(input.FilePath, () => tracker.Complete(input.EntryPath),
+                            tracker.Checkpoint, position => tracker.Advance(input.EntryPath, position));
                         streams.Add(stream);
                     }
                     return new ArchiveWriteEntry(input.EntryPath, stream, input.LastModified);
                 }).ToArray();
-                await using (var output = OpenWrite(temporary))
+                await using (var output = new ProgressWriteStream(temporary, tracker.Checkpoint, tracker.Packed))
                 {
                     if (settings is not null && _engine is IConfigurableArchiveEngine configurable)
                         await configurable.CreateWithSettingsAsync(output, entries, format, password, encryptFileNames, settings, cancellationToken).ConfigureAwait(false);
@@ -62,10 +58,10 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
                         await _engine.CreateAsync(output, entries, format, password, encryptFileNames, cancellationToken).ConfigureAwait(false);
                     else throw new NotSupportedException("当前压缩引擎不支持所选压缩选项。");
                 }
+                foreach (var input in inputs) tracker.Complete(input.EntryPath);
                 cancellationToken.ThrowIfCancellationRequested();
                 EnsureNoLinks(Path.GetDirectoryName(destination)!);
                 File.Move(temporary, destination, overwrite: false);
-                foreach (var input in inputs) Complete(input.EntryPath);
             }
             finally
             {
@@ -76,28 +72,39 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
 
     public Task ExtractAsync(string archivePath, string destinationDirectory, string? password = null,
         IReadOnlyList<string>? entryPaths = null, IProgress<ArchiveOperationProgress>? progress = null,
-        CancellationToken cancellationToken = default, ArchiveExtractSettings? settings = null) => Task.Run(async () =>
+        CancellationToken cancellationToken = default, ArchiveExtractSettings? settings = null,
+        IArchiveExtractionInteraction? interaction = null) => Task.Run(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (interaction is not null && Directory.Exists(ArchivePaths.ResolveUserPath(destinationDirectory)))
+            {
+                await ExtractIntoExistingAsync(archivePath, destinationDirectory, password, entryPaths, progress,
+                    cancellationToken, settings, interaction).ConfigureAwait(false);
+                return;
+            }
             var destination = ValidateNewDestination(destinationDirectory);
             await using var source = OpenRead(archivePath);
             var allEntries = await ReadPlan(source, password, cancellationToken).ConfigureAwait(false);
             var entries = MapExtractionPaths(SelectEntries(allEntries, entryPaths), settings ?? new());
             var temporary = TemporarySibling(destination);
-            progress?.Report(new("", 0, entries.Count));
+            var tracker = new ArchiveProgressTracker(progress, entries.Count,
+                entries.Where(entry => !entry.Info.IsDirectory).Sum(entry => Math.Max(0, entry.Info.Size)), cancellationToken);
+            var packedEntries = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
+            if (packedEntries.All(entry => entry.Info.CompressedSize is > 0 || entry.Info.Size == 0 && entry.Info.CompressedSize == 0))
+                tracker.Packed(packedEntries.Sum(entry => entry.Info.CompressedSize!.Value));
+            tracker.Report();
             try
             {
                 Directory.CreateDirectory(temporary);
                 if (!OperatingSystem.IsWindows())
                     File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                var completed = 0;
                 foreach (var entry in entries.Where(entry => entry.Info.IsDirectory))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var target = Path.Combine(temporary, entry.RelativePath);
                     EnsureNoLinks(Path.GetDirectoryName(target)!);
                     Directory.CreateDirectory(target);
-                    progress?.Report(new(entry.RelativePath, ++completed, entries.Count));
+                    tracker.Complete(entry.RelativePath);
                 }
                 var files = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
                 Stream OpenTarget(PlannedEntry entry)
@@ -105,13 +112,15 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
                     var target = Path.Combine(temporary, entry.RelativePath);
                     EnsureNoLinks(Path.GetDirectoryName(target)!);
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    return OpenWrite(target);
+                    tracker.Advance(entry.RelativePath, 0);
+                    return new ProgressWriteStream(target, tracker.Checkpoint,
+                        position => tracker.Advance(entry.RelativePath, position));
                 }
                 void Complete(PlannedEntry entry)
                 {
                     if (entry.Info.LastModified is { } modified)
                         File.SetLastWriteTimeUtc(Path.Combine(temporary, entry.RelativePath), modified.ToUniversalTime());
-                    progress?.Report(new(entry.RelativePath, ++completed, entries.Count));
+                    tracker.Complete(entry.RelativePath);
                 }
                 if (_engine is IBatchArchiveEngine batch)
                 {
@@ -327,7 +336,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
     private sealed record PlannedEntry(ArchiveEntryInfo Info, string RelativePath);
 
     // Open one file at a time rather than holding a file descriptor for every selected file.
-    private sealed class SourceFileStream(string filePath, Action completed) : Stream
+    private sealed class SourceFileStream(string filePath, Action completed, Action? checkpoint = null, Action<long>? advanced = null) : Stream
     {
         private readonly long _length = new FileInfo(filePath).Length;
         private FileStream? _file;
@@ -344,6 +353,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
         public override int Read(Span<byte> buffer)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            checkpoint?.Invoke();
             if (AtEnd()) return 0;
             var read = File().Read(buffer[..(int)Math.Min(buffer.Length, _length - _position)]);
             Advance(read, buffer.Length);
@@ -353,6 +363,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             cancellationToken.ThrowIfCancellationRequested();
+            checkpoint?.Invoke();
             if (AtEnd()) return 0;
             var read = await File().ReadAsync(buffer[..(int)Math.Min(buffer.Length, _length - _position)], cancellationToken).ConfigureAwait(false);
             Advance(read, buffer.Length);
@@ -372,6 +383,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
             if (read == 0 && requested != 0 && _position < _length)
                 throw new IOException($"Source file changed while archiving: {filePath}");
             _position += read;
+            advanced?.Invoke(_position);
             AtEnd();
         }
         private bool AtEnd()

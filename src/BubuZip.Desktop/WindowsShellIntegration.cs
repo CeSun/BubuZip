@@ -155,6 +155,7 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
             AddMenuVerb(path, "01open", "打开压缩包", "open", archiveFilter);
             AddMenuVerb(path, "02extract", "提取文件…", "extract", archiveFilter);
             AddMenuVerb(path, "03extract-here", "提取到此处", "extract-here", archiveFilter);
+            AddMenuVerb(path, "03extract-smart", "智能解压", "extract-smart", archiveFilter);
             AddMenuVerb(path, "04extract-folder", "提取到同名文件夹", "extract-folder", archiveFilter);
             AddMenuVerb(path, "05test", "测试压缩包", "test", archiveFilter);
         }
@@ -199,7 +200,7 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
     internal static string OpenCommand(string executable) => Quote(executable) + " -- \"%1\"";
     internal static string ShellCommand(string executable, string action)
     {
-        if (action is not ("open" or "extract" or "extract-here" or "extract-folder" or "test" or "compress" or "compress-7z" or "compress-zip"))
+        if (action is not ("open" or "extract" or "extract-here" or "extract-smart" or "extract-folder" or "test" or "compress" or "compress-7z" or "compress-zip"))
             throw new ArgumentException("Unknown shell action.", nameof(action));
         return Quote(executable) + " --shell " + action + " -- \"%1\"";
     }

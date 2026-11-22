@@ -47,6 +47,7 @@ public sealed class MacFinderRequestFileTests
     [InlineData("open", ArchiveShellAction.Open)]
     [InlineData("extract", ArchiveShellAction.Extract)]
     [InlineData("extract-here", ArchiveShellAction.ExtractHere)]
+    [InlineData("extract-smart", ArchiveShellAction.ExtractSmart)]
     [InlineData("extract-folder", ArchiveShellAction.ExtractFolder)]
     [InlineData("test", ArchiveShellAction.Test)]
     [InlineData("compress", ArchiveShellAction.Compress)]

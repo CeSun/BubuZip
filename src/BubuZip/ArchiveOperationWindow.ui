@@ -2,27 +2,6 @@
 @using EclipseUI
 @using EclipseUI.Elements
 
-<Window Title={OperationTitle} Width="560" Height="300" CloseOnEscape="false">
-    <ArchiveSurface RowDefinitions="*,Auto" Style="Background: theme(#2C2C2C, #FAFAFA)">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Padding="24" Gap="14">
-                <TextBlock FontSize="22">{Heading}</TextBlock>
-                <TextBlock FontSize="13" TextWrapping="Wrap">{Description}</TextBlock>
-                <ProgressBar Value={ProgressValue} IsIndeterminate={ProgressIsIndeterminate} Height="8" />
-                @if (ProgressText.Length > 0) {
-                    <TextBlock FontSize="12" TextWrapping="Wrap">{ProgressText}</TextBlock>
-                }
-                @if (OutputLocation.Length > 0) {
-                    <TextBlock FontSize="12" TextWrapping="Wrap">{OutputLocation}</TextBlock>
-                }
-                @if (ErrorText.Length > 0) {
-                    <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{ErrorText}</TextBlock>
-                }
-            </StackPanel>
-        </ScrollViewer>
-        <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,120,8,96" Padding="16" Style="Background: theme(#242424, #F0F0F0)">
-            <Button Grid.Column="1" IsVisible={CanOpenFolder} OnClick={OpenResultFolder}>打开文件夹</Button>
-            <Button Grid.Column="3" OnClick={CancelOrClose} IsEnabled={_completed || !_cancelRequested}>{_completed ? "确认" : "取消"}</Button>
-        </ArchiveSurface>
-    </ArchiveSurface>
+<Window Title={Spec.Title} Width="680" Height="390" CloseOnEscape="false">
+    <ArchiveOperationView Ref={OperationView} Spec={Spec} Desktop={Desktop} BackgroundRequested={MoveToBackground} CanBackground={BackgroundRequested is not null} CloseRequested={CloseOperation} TitleChanged={UpdateOperationTitle} />
 </Window>

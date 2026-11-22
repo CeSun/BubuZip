@@ -15,7 +15,7 @@ internal sealed record DesktopCommandLineOptions(
 
 internal static class DesktopCommandLine
 {
-    internal const string Usage = "Usage: BubuZip [--frames positive-number] [--path folder] [--shot image.png] [--dark] [--settings|--create] [--shell open|extract|extract-here|extract-folder|test|compress|compress-7z|compress-zip] [--] [file ...]";
+    internal const string Usage = "Usage: BubuZip [--frames positive-number] [--path folder] [--shot image.png] [--dark] [--settings|--create] [--shell open|extract|extract-here|extract-smart|extract-folder|test|compress|compress-7z|compress-zip] [--] [file ...]";
 
     internal static DesktopCommandLineOptions Parse(string[] arguments)
     {
@@ -88,6 +88,7 @@ internal static class DesktopCommandLine
         "open" => ArchiveShellAction.Open,
         "extract" => ArchiveShellAction.Extract,
         "extract-here" => ArchiveShellAction.ExtractHere,
+        "extract-smart" => ArchiveShellAction.ExtractSmart,
         "extract-folder" => ArchiveShellAction.ExtractFolder,
         "test" => ArchiveShellAction.Test,
         "compress" => ArchiveShellAction.Compress,

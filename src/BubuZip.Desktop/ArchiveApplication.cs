@@ -30,6 +30,7 @@ public sealed class ArchiveApplication : Application
             InitialPath = options.InitialPath,
             MaxTicks = options.FrameLimit,
             CloseOnEscape = false,
+            BackgroundOperationRequested = OperatingSystem.IsWindows() ? DesktopArchiveOperationWindows.MinimizeActiveWindow : null,
         };
         if (options.ShellRequest is not null) window.RequestShellAction(options.ShellRequest);
         else foreach (var path in options.ArchivePaths) window.RequestOpenArchive(path);

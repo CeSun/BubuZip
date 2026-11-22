@@ -2,8 +2,9 @@
 @using EclipseUI
 @using EclipseUI.Elements
 
-<Window Title={OperationOnly ? "BubuZip · " + DialogTitle : "BubuZip"} Width={OperationOnly ? _panel == DialogKind.Create ? 900 : 560 : 1000} Height={OperationOnly ? _panel == DialogKind.Create ? 740 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
+<Window Title={_standaloneOperation is not null ? _standaloneOperationTitle : OperationOnly ? "BubuZip · " + DialogTitle : "BubuZip"} Width={_standaloneOperation is not null ? 680 : OperationOnly ? _panel == DialogKind.Create ? 900 : 560 : 1000} Height={_standaloneOperation is not null ? 390 : OperationOnly ? _panel == DialogKind.Create ? 740 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
     <ArchiveSurface Ref={RootGrid} Style="Background: theme(#1C2233, #F0F4F9)">
+        <ContentControl Ref={StandaloneOperationHost} IsVisible={_standaloneOperationView is not null} />
         <ArchiveSurface IsVisible={!OperationOnly} IsEnabled={_panel == DialogKind.None && !_pickerBusy && !_busy}>
             <ArchiveSurface IsVisible={!_showBrowser}>
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Gap="22" MaxWidth="560" Margin="24">
@@ -90,7 +91,7 @@
             <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
         </ContextMenu>
         <ArchiveDialogPopup Ref={CreatePopup} StaysOpen={_pickerBusy || _busy} OnClosed={CloseCreatePopup} />
-        <ArchiveSurface Ref={DialogOverlay} IsVisible={OperationOnly || _panel != DialogKind.None && !UsesCreatePopup} Style="Background: #00000066">
+        <ArchiveSurface Ref={DialogOverlay} IsVisible={_standaloneOperation is null && (OperationOnly || _panel != DialogKind.None && !UsesCreatePopup)} Style="Background: #00000066">
             <ArchiveDialogBorder Ref={DialogFrame} UsePopupLayout={UsesCreatePopup} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : 560} MaxHeight={UsesCreatePopup ? 620 : double.PositiveInfinity} Margin={OperationOnly || UsesCreatePopup ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderThickness={OperationOnly ? 0 : 1} BorderColor="#80808060" Style="Background: theme(#1C2233, #F0F4F9)">
                 <ArchiveSurface RowDefinitions="*,Auto">
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
@@ -197,8 +198,10 @@
                             </ArchiveFormColumns>
                         }
                         @if (_panel == DialogKind.Extract) {
-                            @if (_shellExtractHere) {
-                                <TextBlock FontSize="12" TextWrapping="Wrap">提取到压缩包所在目录；如有同名文件或文件夹，保留已有项目并报告冲突。</TextBlock>
+                            @if (_shellExtractSmart) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">智能解压：单个顶层项目直接放在输出位置；多个顶层项目放入压缩包同名文件夹。遇到同名文件时询问处理方式。</TextBlock>
+                            } else if (_shellExtractHere) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">提取到压缩包所在目录；同名文件夹会合并，遇到同名文件时询问处理方式。</TextBlock>
                             }
                             <ArchiveSurface ColumnDefinitions="100,*" Gap="8">
                                 <TextBlock>路径模式</TextBlock>
@@ -220,7 +223,7 @@
                             <TextBox @bind-Text={_newName} />
                         }
                         @if (_panel == DialogKind.Extract) {
-                            <TextBlock>{_panel == DialogKind.Create ? "压缩包路径" : _shellExtractHere ? "输出文件夹（不覆盖或合并已有项目）" : "输出文件夹（新建）"}</TextBlock>
+                            <TextBlock>输出文件夹（同名文件会询问）</TextBlock>
                             <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
                                 <TextBox @bind-Text={_destination} />
                                 <Button Grid.Column="1" OnClick={ChooseDestination}>浏览…</Button>

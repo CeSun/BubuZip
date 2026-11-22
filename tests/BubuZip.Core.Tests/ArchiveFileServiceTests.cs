@@ -14,6 +14,56 @@ public sealed class ArchiveFileServiceTests : IDisposable
     [Theory]
     [InlineData(ArchiveFormat.Zip)]
     [InlineData(ArchiveFormat.SevenZip)]
+    public async Task LargeFileReportsByteProgressBeforeCompletionAndFinalOutputSize(ArchiveFormat format)
+    {
+        var source = Path.Combine(_root, "large.bin");
+        var data = new byte[1024 * 1024];
+        new Random(42).NextBytes(data);
+        await File.WriteAllBytesAsync(source, data);
+        var archive = Path.Combine(_root, "large.archive");
+        var creation = new List<ArchiveOperationProgress>();
+        await _service.CreateAsync([source], archive, format, progress: new ImmediateProgress(creation.Add));
+        Assert.Contains(creation, report => report.ProcessedBytes is > 0 && report.ProcessedBytes < data.Length && report.CompletedEntries == 0);
+        Assert.All(creation, report => Assert.Equal(data.Length, report.TotalBytes));
+        Assert.Equal(data.Length, creation[^1].ProcessedBytes);
+        Assert.Equal(new FileInfo(archive).Length, creation[^1].CompressedBytes);
+        Assert.Equal(creation.Select(report => report.ProcessedBytes).Order(), creation.Select(report => report.ProcessedBytes));
+
+        var extraction = new List<ArchiveOperationProgress>();
+        var output = Path.Combine(_root, "output");
+        await _service.ExtractAsync(archive, output, progress: new ImmediateProgress(extraction.Add));
+        Assert.Contains(extraction, report => report.ProcessedBytes is > 0 && report.ProcessedBytes < data.Length && report.CompletedEntries == 0);
+        Assert.Equal(data.Length, extraction[^1].ProcessedBytes);
+        Assert.Equal(data.Length, extraction[^1].TotalBytes);
+        Assert.Equal(data, await File.ReadAllBytesAsync(Path.Combine(output, "large.bin")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancellationDuringAFileLeavesNoPublishedOutput(bool extracting)
+    {
+        var source = Path.Combine(_root, "large.bin");
+        await File.WriteAllBytesAsync(source, new byte[1024 * 1024]);
+        var archive = Path.Combine(_root, "large.zip");
+        if (extracting) await _service.CreateAsync([source], archive, ArchiveFormat.Zip);
+        using var cancellation = new CancellationTokenSource();
+        var progress = new ImmediateProgress(report =>
+        {
+            if (report.ProcessedBytes is > 0 && report.ProcessedBytes < report.TotalBytes) cancellation.Cancel();
+        });
+        var destination = extracting ? Path.Combine(_root, "output") : archive;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => extracting
+            ? _service.ExtractAsync(archive, destination, progress: progress, cancellationToken: cancellation.Token)
+            : _service.CreateAsync([source], destination, ArchiveFormat.Zip, progress: progress, cancellationToken: cancellation.Token));
+        Assert.False(File.Exists(destination));
+        Assert.False(Directory.Exists(destination));
+        AssertNoTemporaryOutputs();
+    }
+
+    [Theory]
+    [InlineData(ArchiveFormat.Zip)]
+    [InlineData(ArchiveFormat.SevenZip)]
     public async Task FolderRoundTripPreservesUnicodeEmptyFilesAndEmptyDirectories(ArchiveFormat format)
     {
         var source = Path.Combine(_root, "资料");

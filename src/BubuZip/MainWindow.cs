@@ -180,7 +180,7 @@ public partial class MainWindow
     {
         base.OnUpdating();
         ShowRequestedSettings();
-        OpenNextRequestedArchive();
+        if (!_standaloneOperationClosing) OpenNextRequestedArchive();
         if (_presentedPanel == DialogKind.None && _panel != DialogKind.None)
             _focusBeforeDialog = FocusManager.GetFor(RootGrid)?.Focused;
     }
@@ -188,6 +188,11 @@ public partial class MainWindow
     protected override void OnUpdated()
     {
         base.OnUpdated();
+        if (_standaloneOperationClosing)
+        {
+            _standaloneOperationClosing = false;
+            if (!_openRequests.IsEmpty) Invalidate();
+        }
         SynchronizeCreatePopup();
         _createPopupClosedForOperation?.TrySetResult(true);
         var previous = _presentedPanel;
@@ -524,7 +529,7 @@ public partial class MainWindow
     private void PrepareExtract()
     {
         if (_busy) return;
-        _shellExtractHere = false;
+        _shellExtractHere = _shellExtractSmart = false;
         _operationArchive = _snapshot?.ArchivePath ?? SelectedRows.FirstOrDefault(row => row.IsArchive)?.Path ?? "";
         if (_operationArchive.Length == 0) return;
         _extractEntries = _snapshot?.ArchivePath is not null
@@ -562,7 +567,7 @@ public partial class MainWindow
                 if (_disposed) return;
                 if (folder is not null)
                 {
-                    _shellExtractHere = false;
+                    _shellExtractHere = _shellExtractSmart = false;
                     _destination = UniqueDestination(folder, ArchiveBaseName(OperationArchiveName), "");
                 }
             }
@@ -627,7 +632,7 @@ public partial class MainWindow
             var progress = new Progress<ArchiveOperationProgress>(report =>
             {
                 if (_disposed || !_busy || _panel != DialogKind.Progress) return;
-                _progress = report.TotalEntries == 0 ? 0 : report.CompletedEntries * 100d / report.TotalEntries;
+                _progress = report.Percent;
                 _progressText = $"{report.CompletedEntries} / {report.TotalEntries}  ·  {report.EntryPath}"; Invalidate();
             });
             async Task Execute(IProgress<ArchiveOperationProgress> operationProgress, CancellationToken token)
@@ -637,8 +642,10 @@ public partial class MainWindow
                     _formatIndex == 1 && _encryptNames, operationProgress, token, createSettings);
                 else if (mode == DialogKind.Extract)
                 {
-                    if (_shellExtractHere) await FileService.ExtractHereAsync(_operationArchive, destination, password, operationProgress, token, extractSettings);
-                    else await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, operationProgress, token, extractSettings);
+                    var interaction = operationProgress as IArchiveExtractionInteraction;
+                    if (_shellExtractSmart) await FileService.ExtractSmartAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
+                    else if (_shellExtractHere) await FileService.ExtractHereAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
+                    else await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, operationProgress, token, extractSettings, interaction);
                 }
                 else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, operationProgress, token);
                 else if (mode == DialogKind.AddToArchive) await ArchiveEditor.AddAsync(_operationArchive, _sources, _replaceExisting,
@@ -653,7 +660,7 @@ public partial class MainWindow
                 DialogKind.DeleteEntries => "所选归档项目已删除。", _ => "重命名完成。",
             };
             var resultFolder = mode == DialogKind.Create ? Path.GetDirectoryName(destination) : mode == DialogKind.Extract ? destination : null;
-            var completed = !OperationOnly && OperationWindows is not null && mode is DialogKind.Create or DialogKind.Extract or DialogKind.AddToArchive
+            var completed = OperationWindows is not null && mode is DialogKind.Create or DialogKind.Extract or DialogKind.AddToArchive
                 ? await RunOperationWindowAsync(new(mode == DialogKind.Extract ? "正在解压" : "正在压缩",
                     mode == DialogKind.Create ? SourceSummary : OperationArchiveName, success,
                     async (reporter, token) =>
@@ -661,7 +668,8 @@ public partial class MainWindow
                         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
                         await _operations.RunAsync(inner => Execute(reporter, inner), linked.Token).ConfigureAwait(false);
                     }, mode == DialogKind.AddToArchive ? _operationArchive : destination,
-                    mode == DialogKind.AddToArchive ? Path.GetDirectoryName(_operationArchive) : resultFolder), mode)
+                    mode == DialogKind.AddToArchive ? Path.GetDirectoryName(_operationArchive) : resultFolder,
+                    mode == DialogKind.Create ? destination : _operationArchive, mode == DialogKind.Extract), mode)
                 : await RunOperationAsync(token => Execute(progress, token), success, mode,
                     mode is DialogKind.Create or DialogKind.Extract ? destination : null, resultFolder);
             if (completed && mode == DialogKind.Extract && !_disposed && !OperationOnly && OperationWindows is null)
@@ -699,8 +707,16 @@ public partial class MainWindow
         {
             var result = OperationWindows!.Show(operation);
             if (_disposed) return false;
-            if (result.Succeeded) { StatusMessage = operation.SuccessMessage; return true; }
-            if (result.Cancelled) { StatusMessage = "操作已取消"; return false; }
+            if (result.Succeeded)
+            {
+                StatusMessage = operation.SuccessMessage;
+                return true;
+            }
+            if (result.Cancelled)
+            {
+                StatusMessage = "操作已取消";
+                return false;
+            }
             _panel = returnPanel;
             _dialogError = result.Error ?? "操作未完成，请重试。";
             return false;
@@ -826,6 +842,7 @@ public partial class MainWindow
     {
         _disposed = true; _operationCancellation?.Cancel(); _lifetime.Cancel();
         _createPopupClosedForOperation?.TrySetResult(false);
+        _standaloneOperationClosed?.TrySetResult(new(false, true, null));
         try { _operations.StopAsync().GetAwaiter().GetResult(); }
         finally { DiscardPendingClipboardFiles(); ClearNestedArchives(); _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
     }

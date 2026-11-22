@@ -4,13 +4,14 @@ import FinderSync
 import Foundation
 
 enum FinderArchiveAction: Int, CaseIterable {
-    case open = 1, extract, extractHere, extractFolder, test, compress, compress7z, compressZip
+    case open = 1, extract, extractHere, extractFolder, test, compress, compress7z, compressZip, extractSmart
 
     var verb: String {
         switch self {
         case .open: return "open"
         case .extract: return "extract"
         case .extractHere: return "extract-here"
+        case .extractSmart: return "extract-smart"
         case .extractFolder: return "extract-folder"
         case .test: return "test"
         case .compress: return "compress"

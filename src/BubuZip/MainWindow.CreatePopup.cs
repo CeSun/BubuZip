@@ -43,7 +43,8 @@ public partial class MainWindow
 
     private async Task<bool> RunOperationWindowAsync(ArchiveOperationSpec operation, DialogKind returnPanel)
     {
-        if (!OperationOnly && (CreatePopup.IsOpen || _presentedPanel == DialogKind.Create) &&
+        if (OperationOnly) return await RunStandaloneOperationAsync(operation, returnPanel);
+        if ((CreatePopup.IsOpen || _presentedPanel == DialogKind.Create) &&
             SynchronizationContext.Current is UiSynchronizationContext)
         {
             _busy = true;

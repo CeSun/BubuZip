@@ -149,6 +149,238 @@ public sealed class ShellActionTests
         Assert.Equal("manual payload", reader.ReadToEnd());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StandaloneCreationUsesItsOwnWindowAndCancellationRestoresItsForm(bool cancel)
+    {
+        using var fixture = new ShellFixture();
+        var source = fixture.WriteFile("standalone.txt", "standalone payload");
+        var presenter = new CapturingOperationWindows();
+        if (cancel) fixture.Engine.NextCreationFailure = new OperationCanceledException();
+        fixture.Open(new(ArchiveShellAction.Compress, [source]), operationOnly: true, operationWindows: presenter);
+        fixture.WaitForIdle();
+        fixture.Click("确定");
+        var view = fixture.WaitForOperationResult();
+        Assert.Empty(presenter.Operations);
+        Assert.Equal(Path.Combine(fixture.Root, "standalone.zip"), view.Spec.DisplayPath);
+        Assert.False(view.Spec.IsExtraction);
+        Assert.Equal(!cancel, File.Exists(view.Spec.ResultPath));
+        Assert.Equal(680, fixture.Window.Width);
+        Assert.Equal(390, fixture.Window.Height);
+        fixture.Click("确认");
+        fixture.WaitForIdle();
+        Assert.Equal(!cancel, fixture.Window.IsDisposed);
+        if (cancel) Assert.Contains(fixture.VisibleButtons(), button => button.Label == "确定" && button.IsEffectiveEnabled);
+    }
+
+    [Theory]
+    [InlineData(ArchiveShellAction.ExtractHere)]
+    [InlineData(ArchiveShellAction.ExtractFolder)]
+    public void ShellExtractionShowsProgressAndSuccessInsideTheOriginalWindow(ArchiveShellAction action)
+    {
+        using var fixture = new ShellFixture();
+        var archive = fixture.WriteZip("single-window.zip", ("payload.txt", "payload"));
+        var presenter = new CapturingOperationWindows();
+        fixture.Open(new(action, [archive]), operationOnly: true, operationWindows: presenter);
+        var view = fixture.WaitForOperationResult();
+        Assert.Empty(presenter.Operations);
+        Assert.True(view.Spec.IsExtraction);
+        Assert.True(view.Result.Succeeded);
+        Assert.Equal("操作成功", fixture.Window.Title);
+        Assert.Single(fixture.Elements<ArchiveOperationView>());
+        Assert.Single(fixture.Elements<ProgressBar>(), bar => bar.IsEffectivelyVisible);
+        Assert.DoesNotContain(fixture.VisibleTexts(), text => text == "正在准备…");
+        fixture.Click("确认");
+        fixture.WaitForIdle();
+        Assert.True(fixture.Window.IsDisposed);
+    }
+
+    [Fact]
+    public void MultipleShellArchivesReuseTheWindowAndStartFreshProgressForEachArchive()
+    {
+        using var fixture = new ShellFixture();
+        var first = fixture.WriteZip("first.zip", ("first.txt", "first payload"));
+        var second = fixture.WriteZip("second.zip", ("second.txt", "second payload"));
+        var presenter = new CapturingOperationWindows();
+        fixture.Open(new(ArchiveShellAction.ExtractFolder, [first, second]), operationOnly: true, operationWindows: presenter);
+        var firstView = fixture.WaitForOperationResult();
+        Assert.Equal(first, firstView.Spec.DisplayPath);
+        fixture.Click("确认");
+        var clock = Stopwatch.StartNew();
+        while (ReferenceEquals(firstView, fixture.Elements<ArchiveOperationView>().SingleOrDefault()))
+        {
+            fixture.Host.DrainPostedWork();
+            fixture.Host.UpdateLayout();
+            if (clock.Elapsed > TimeSpan.FromSeconds(5)) throw new TimeoutException("First progress view was not removed.");
+            Thread.Sleep(1);
+        }
+        var secondView = fixture.WaitForOperationResult();
+        Assert.NotSame(firstView, secondView);
+        Assert.Equal(second, secondView.Spec.DisplayPath);
+        Assert.True(secondView.Result.Succeeded);
+        Assert.False(fixture.Window.IsDisposed);
+        Assert.Empty(presenter.Operations);
+        fixture.Click("确认");
+        fixture.WaitForIdle();
+        Assert.True(fixture.Window.IsDisposed);
+    }
+
+    [Fact]
+    public void StandaloneFailureReturnsToTheFormAndRetryCreatesAFreshProgressView()
+    {
+        using var fixture = new ShellFixture();
+        var source = fixture.WriteFile("retry.txt", "retry payload");
+        var presenter = new CapturingOperationWindows();
+        fixture.Engine.NextCreationFailure = new IOException("暂时无法写入，请重试。");
+        fixture.Open(new(ArchiveShellAction.Compress, [source]), operationOnly: true, operationWindows: presenter);
+        fixture.WaitForIdle();
+        fixture.Click("确定");
+        var failedView = fixture.WaitForOperationResult();
+        Assert.Equal("暂时无法写入，请重试。", failedView.Result.Error);
+        fixture.Click("确认");
+        fixture.WaitForIdle();
+        Assert.False(fixture.Window.IsDisposed);
+        Assert.Empty(fixture.Elements<ArchiveOperationView>());
+        Assert.Contains("暂时无法写入，请重试。", fixture.VisibleTexts());
+        fixture.Click("确定");
+        var retried = fixture.WaitForOperationResult();
+        Assert.NotSame(failedView, retried);
+        Assert.True(retried.Result.Succeeded);
+        Assert.Empty(presenter.Operations);
+        fixture.Click("确认");
+        fixture.WaitForIdle();
+        Assert.True(fixture.Window.IsDisposed);
+    }
+
+    [Theory]
+    [InlineData("替换文件", "replacement", "替换 1 项")]
+    [InlineData("跳过", "original", "跳过 1 项")]
+    [InlineData("保留两者", "original", "另存 1 项")]
+    [InlineData("取消解压", "original", "操作已取消")]
+    public void ShellExtractionConflictExplainsTheTargetAndOffersWorkingChoices(string choice, string expected, string summary)
+    {
+        using var fixture = new ShellFixture();
+        var archive = fixture.WriteZip("conflict.zip", ("same.txt", "replacement"), ("new.txt", "new"));
+        var target = fixture.WriteFile("same.txt", "original");
+        var presenter = new CapturingOperationWindows();
+        fixture.Open(new(ArchiveShellAction.ExtractHere, [archive]), operationOnly: true, operationWindows: presenter);
+        fixture.WaitForVisibleButton("保留两者");
+        Assert.Equal("发现同名文件", fixture.Window.Title);
+        Assert.Contains(fixture.VisibleTexts(), text => text.EndsWith("same.txt", StringComparison.Ordinal));
+        Assert.Contains("目标位置的文件", fixture.VisibleTexts());
+        Assert.Contains("压缩包中的文件", fixture.VisibleTexts());
+        Assert.DoesNotContain("操作失败", fixture.VisibleTexts());
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "new.txt")));
+        fixture.Host.AvailableSize = new Size(544, 312);
+        fixture.Host.UpdateLayout();
+        foreach (var button in fixture.VisibleButtons())
+        {
+            var origin = button.PointFromRoot(Point.Zero);
+            var center = new Point(-origin.X + button.FinalRect.Width / 2, -origin.Y + button.FinalRect.Height / 2);
+            Assert.InRange(-origin.Y + button.FinalRect.Height, 0, 312);
+            Assert.Contains(fixture.Host.Input.HitTest(center), button.Descendants().Prepend(button));
+        }
+        fixture.Click(choice);
+        var view = fixture.WaitForOperationResult();
+        Assert.Equal(choice == "取消解压", view.Result.Cancelled);
+        Assert.Equal(expected, File.ReadAllText(target));
+        Assert.Contains(fixture.VisibleTexts(), text => text.Contains(summary, StringComparison.Ordinal));
+        Assert.Equal(choice != "取消解压", File.Exists(Path.Combine(fixture.Root, "new.txt")));
+        Assert.Equal(choice == "保留两者", File.Exists(Path.Combine(fixture.Root, "same (2).txt")));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.Root, ".bubuzip-*"));
+        Assert.Empty(presenter.Operations);
+    }
+
+    [Fact]
+    public void ConflictApplyToAllIsScopedToThisOperationAndShowsTheFinalCounts()
+    {
+        using var fixture = new ShellFixture();
+        var archive = fixture.WriteZip("conflict.zip", ("a.txt", "new a"), ("b.txt", "new b"));
+        fixture.WriteFile("a.txt", "old a");
+        fixture.WriteFile("b.txt", "old b");
+        fixture.Open(new(ArchiveShellAction.ExtractHere, [archive]), operationOnly: true,
+            operationWindows: new CapturingOperationWindows());
+        fixture.WaitForVisibleButton("保留两者");
+        Assert.Single(fixture.Elements<CheckBox>(), check => check.IsEffectivelyVisible).Checked = true;
+        fixture.Click("替换文件");
+        Assert.True(fixture.WaitForOperationResult().Result.Succeeded);
+        Assert.Equal("new b", File.ReadAllText(Path.Combine(fixture.Root, "b.txt")));
+        Assert.Contains(fixture.VisibleTexts(), text => text.Contains("替换 2 项", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ClosingAConflictPromptCancelsTheOperationAndCleansUpWithoutPumpingTheUi()
+    {
+        using var fixture = new ShellFixture();
+        var archive = fixture.WriteZip("conflict.zip", ("same.txt", "replacement"), ("new.txt", "new"));
+        fixture.WriteFile("same.txt", "original");
+        fixture.Open(new(ArchiveShellAction.ExtractHere, [archive]), operationOnly: true,
+            operationWindows: new CapturingOperationWindows());
+        fixture.WaitForVisibleButton("保留两者");
+        var view = Assert.Single(fixture.Elements<ArchiveOperationView>());
+        fixture.Window.Dispose();
+        Assert.True(view.Result.Cancelled);
+        Assert.Equal("original", File.ReadAllText(Path.Combine(fixture.Root, "same.txt")));
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "new.txt")));
+        Assert.Empty(Directory.EnumerateDirectories(fixture.Root, ".bubuzip-*"));
+    }
+
+    [Theory]
+    [InlineData(680, 390, false)]
+    [InlineData(544, 312, false)]
+    [InlineData(544, 260, false)]
+    [InlineData(440, 240, false)]
+    [InlineData(340, 200, false)]
+    [InlineData(680, 390, true)]
+    [InlineData(544, 312, true)]
+    [InlineData(544, 260, true)]
+    [InlineData(440, 240, true)]
+    [InlineData(340, 200, true)]
+    public void EmbeddedProgressKeepsFooterVisibleAndClickableWhenTheClientAreaShrinks(int width, int height, bool completed)
+    {
+        using var fixture = new ShellFixture();
+        var archive = fixture.WriteZip("footer.zip", ("nested/long-path/payload.txt", "payload"));
+        if (!completed) fixture.Engine.ExtractionBlock = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Open(new(ArchiveShellAction.ExtractFolder, [archive]), operationOnly: true,
+            operationWindows: new CapturingOperationWindows());
+        if (completed) fixture.WaitForOperationResult();
+        var size = new Size(width, height);
+        fixture.Host.AvailableSize = size;
+        fixture.Host.UpdateLayout();
+        fixture.Window.Content!.Arrange(new Rect(Point.Zero, size));
+        var view = Assert.Single(fixture.Elements<ArchiveOperationView>());
+        Assert.Equal(height, view.FinalRect.Height);
+        var buttons = fixture.VisibleButtons().ToArray();
+        Assert.Contains(buttons, button => button.Label == (completed ? "确认" : "取消"));
+        Assert.Contains(buttons, button => button.Label == (completed ? "打开文件夹" : "暂停"));
+        var positions = new Dictionary<Button, Point>();
+        foreach (var button in buttons)
+        {
+            var origin = button.PointFromRoot(Point.Zero);
+            var bounds = new Rect(-origin.X, -origin.Y, button.FinalRect.Width, button.FinalRect.Height);
+            Assert.InRange(bounds.Left, 0, width);
+            Assert.InRange(bounds.Right, 0, width);
+            Assert.InRange(bounds.Top, 0, height);
+            Assert.InRange(bounds.Bottom, 0, height);
+            var center = new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+            Assert.Contains(fixture.Host.Input.HitTest(center), button.Descendants().Prepend(button));
+            positions[button] = origin;
+        }
+        var scroller = Assert.Single(view.Descendants().OfType<ScrollViewer>(), viewer => viewer.IsEffectivelyVisible);
+        if (height >= 312) Assert.Equal(0, scroller.ScrollableHeight);
+        if (height <= 260) Assert.True(scroller.ScrollableHeight > 0);
+        scroller.VerticalOffset = scroller.ScrollableHeight;
+        fixture.Host.UpdateLayout();
+        fixture.Window.Content.Arrange(new Rect(Point.Zero, size));
+        foreach (var button in buttons) Assert.Equal(positions[button], button.PointFromRoot(Point.Zero));
+        if (!completed)
+        {
+            fixture.Click("取消");
+            Assert.True(fixture.WaitForOperationResult().Result.Cancelled);
+        }
+    }
+
     [Fact]
     public void ClosingTheOwnerWhileTheCreationPopupIsClosingDoesNotStartAnOperationWindow()
     {
@@ -387,7 +619,7 @@ public sealed class ShellActionTests
         fixture.WaitForIdle();
 
         Assert.Contains("提取文件", fixture.Texts());
-        Assert.Contains("输出文件夹（新建）", fixture.Texts());
+        Assert.Contains("输出文件夹（同名文件会询问）", fixture.Texts());
         Assert.Equal(Path.Combine(fixture.Root, "bundle"), Assert.Single(fixture.Elements<TextBox>(), box => box is not PasswordBox && box.IsEffectivelyVisible).Text);
         Assert.False(Directory.Exists(Path.Combine(fixture.Root, "bundle")));
         Assert.Equal(0, fixture.Desktop.InputPickerCalls);
@@ -427,6 +659,23 @@ public sealed class ShellActionTests
         Assert.Contains(fixture.Root, fixture.Desktop.OpenedPaths);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SmartShellCommandChoosesOutputFromTopLevelItems(bool multipleRoots)
+    {
+        using var fixture = new ShellFixture();
+        var archive = multipleRoots
+            ? fixture.WriteZip("bundle.zip", ("one.txt", "one"), ("two.txt", "two"))
+            : fixture.WriteZip("bundle.zip", ("folder/one.txt", "one"), ("folder/two.txt", "two"));
+        fixture.Open(new(ArchiveShellAction.ExtractSmart, [archive]));
+        fixture.WaitForIdle();
+        var folder = Path.Combine(fixture.Root, multipleRoots ? "bundle" : "folder");
+        Assert.Equal("one", File.ReadAllText(Path.Combine(folder, "one.txt")));
+        Assert.Equal("two", File.ReadAllText(Path.Combine(folder, "two.txt")));
+        Assert.Equal("提取完成。", fixture.Window.StatusMessage);
+    }
+
     [Fact]
     public void ExtractHereConflictReportsAnErrorAndDoesNotCommitAnyOtherItems()
     {
@@ -439,7 +688,7 @@ public sealed class ShellActionTests
 
         Assert.Equal("original", File.ReadAllText(Path.Combine(fixture.Root, "keep.txt")));
         Assert.False(File.Exists(Path.Combine(fixture.Root, "new.txt")));
-        Assert.Contains(fixture.Texts(), text => text.Contains("已存在同名项目", StringComparison.Ordinal));
+        Assert.Contains(fixture.Texts(), text => text.Contains("目标位置已有同名项目", StringComparison.Ordinal));
         Assert.Empty(fixture.Desktop.OpenedPaths);
         Assert.DoesNotContain("操作成功", fixture.Texts());
     }
@@ -519,13 +768,44 @@ public sealed class ShellActionTests
             Host.DrainPostedWork();
             if (!Window.IsDisposed) Host.UpdateLayout();
         }
+        public ArchiveOperationView WaitForOperationResult()
+        {
+            var clock = Stopwatch.StartNew();
+            while (clock.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Host.DrainPostedWork();
+                Host.UpdateLayout();
+                var view = Elements<ArchiveOperationView>().SingleOrDefault();
+                if (view is not null && (view.Result.Succeeded || view.Result.Cancelled || view.Result.Error is not null))
+                {
+                    Host.UpdateLayout();
+                    return view;
+                }
+                Thread.Sleep(1);
+            }
+            throw new TimeoutException("Embedded operation did not finish.");
+        }
+
+        public void WaitForVisibleButton(string label)
+        {
+            var clock = Stopwatch.StartNew();
+            while (clock.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Host.DrainPostedWork();
+                Host.UpdateLayout();
+                if (VisibleButtons().Any(button => button.Label == label)) return;
+                Thread.Sleep(1);
+            }
+            throw new TimeoutException("Button did not appear: " + label + " | " + string.Join(" | ", VisibleTexts()));
+        }
+
         public void WaitForIdle()
         {
             var clock = Stopwatch.StartNew();
             do
             {
                 Host.DrainPostedWork();
-                Host.UpdateLayout();
+                if (!Window.IsDisposed) Host.UpdateLayout();
                 if (!Window.TaskIsRunning && Host.SynchronizationContext?.PendingCount == 0) return;
                 Thread.Sleep(1);
             } while (clock.Elapsed < TimeSpan.FromSeconds(10));
@@ -546,6 +826,7 @@ public sealed class ShellActionTests
         private readonly SharpCompressArchiveEngine _engine = new();
         public int Extractions;
         public Exception? NextCreationFailure;
+        public TaskCompletionSource? ExtractionBlock;
         public Task CreateAsync(Stream destination, IReadOnlyList<ArchiveWriteEntry> entries, ArchiveFormat format = ArchiveFormat.Zip,
             string? password = null, bool encryptFileNames = false, CancellationToken cancellationToken = default)
         {
@@ -558,10 +839,11 @@ public sealed class ShellActionTests
         }
         public Task<IReadOnlyList<ArchiveEntryInfo>> ListAsync(Stream source, string? password = null, CancellationToken cancellationToken = default) =>
             _engine.ListAsync(source, password, cancellationToken);
-        public Task ExtractEntryAsync(Stream source, string entryPath, Stream destination, string? password = null, CancellationToken cancellationToken = default)
+        public async Task ExtractEntryAsync(Stream source, string entryPath, Stream destination, string? password = null, CancellationToken cancellationToken = default)
         {
             Extractions++;
-            return _engine.ExtractEntryAsync(source, entryPath, destination, password, cancellationToken);
+            if (ExtractionBlock is not null) await ExtractionBlock.Task.WaitAsync(cancellationToken);
+            await _engine.ExtractEntryAsync(source, entryPath, destination, password, cancellationToken);
         }
     }
 

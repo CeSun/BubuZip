@@ -1,0 +1,83 @@
+@namespace BubuZip
+@using EclipseUI
+@using EclipseUI.Elements
+@using BubuZip.Core
+
+<ArchiveSurface RowDefinitions="*,Auto" Style="Background: theme(#20232B, #FAFAF7)">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible={!HasConflict}>
+        <StackPanel Padding="14" Gap="5">
+            <TextBlock FontSize="20">{DisplayHeading}</TextBlock>
+            <TextBlock Ref={EntryLabel} FontSize="13">{DisplayEntry}</TextBlock>
+            <StackPanel Gap="3">
+                <TextBlock FontSize="13">{ProgressText}</TextBlock>
+                <ProgressBar Value={ProgressValue} IsIndeterminate={ProgressIsIndeterminate} Height="4" />
+            </StackPanel>
+            <ArchiveSurface ColumnDefinitions="*,*" Gap="32">
+                <ArchiveSurface ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Gap="4">
+                    <TextBlock>已用时间：</TextBlock>
+                    <TextBlock Grid.Column="1" HorizontalAlignment="Right">{ElapsedText}</TextBlock>
+                    <TextBlock Grid.Row="1">剩余时间：</TextBlock>
+                    <TextBlock Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right">{RemainingText}</TextBlock>
+                    <TextBlock Grid.Row="2">文件：</TextBlock>
+                    <TextBlock Grid.Row="2" Grid.Column="1" HorizontalAlignment="Right">{FileCountText}</TextBlock>
+                </ArchiveSurface>
+                <ArchiveSurface Grid.Column="1" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Gap="4">
+                    <TextBlock>速度：</TextBlock>
+                    <TextBlock Grid.Column="1" HorizontalAlignment="Right">{SpeedText}</TextBlock>
+                    <TextBlock Grid.Row="1">总大小：</TextBlock>
+                    <TextBlock Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right">{Size(_visibleProgress?.TotalBytes)}</TextBlock>
+                    <TextBlock Grid.Row="2">已处理：</TextBlock>
+                    <TextBlock Grid.Row="2" Grid.Column="1" HorizontalAlignment="Right">{Size(_visibleProgress?.ProcessedBytes)}</TextBlock>
+                    <TextBlock Grid.Row="3">压缩后大小：</TextBlock>
+                    <TextBlock Grid.Row="3" Grid.Column="1" HorizontalAlignment="Right">{Size(_visibleProgress?.CompressedBytes)}</TextBlock>
+                    <TextBlock Grid.Row="4">压缩率：</TextBlock>
+                    <TextBlock Grid.Row="4" Grid.Column="1" HorizontalAlignment="Right">{RatioText}</TextBlock>
+                </ArchiveSurface>
+            </ArchiveSurface>
+            @if (OutputLocation.Length > 0) {
+                <TextBlock Ref={OutputLabel} FontSize="12">{DisplayOutput}</TextBlock>
+            }
+            @if (ErrorText.Length > 0) {
+                <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{ErrorText}</TextBlock>
+            }
+        </StackPanel>
+    </ScrollViewer>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible={HasConflict}>
+        <StackPanel Padding="14" Gap="10">
+            <TextBlock FontSize="20">{ConflictHeading}</TextBlock>
+            <TextBlock FontSize="13" TextWrapping="Wrap">目标位置已存在此名称，请选择如何处理：</TextBlock>
+            <TextBlock Ref={ConflictPathLabel} FontSize="13">{DisplayConflictPath}</TextBlock>
+            <ArchiveSurface ColumnDefinitions="*,*" Gap="16">
+                <StackPanel Gap="4">
+                    <TextBlock FontSize="13">{ConflictExistingTitle}</TextBlock>
+                    <TextBlock FontSize="12" TextWrapping="Wrap">{ConflictExistingDetails}</TextBlock>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Gap="4">
+                    <TextBlock FontSize="13">{ConflictIncomingTitle}</TextBlock>
+                    <TextBlock FontSize="12" TextWrapping="Wrap">{ConflictIncomingDetails}</TextBlock>
+                </StackPanel>
+            </ArchiveSurface>
+            <TextBlock FontSize="12" TextWrapping="Wrap">{ConflictExplanation}</TextBlock>
+            <CheckBox HorizontalAlignment="Left" Width="280" @bind-Checked={_applyConflictToAll} IsEnabled={CanChooseConflict}>对后续同类冲突使用此选择</CheckBox>
+        </StackPanel>
+    </ScrollViewer>
+    <ArchiveSurface Grid.Row="1" Padding="12" IsVisible={!HasConflict} Style="Background: theme(#292D36, #EFEFEF)">
+        <ArchiveSurface ColumnDefinitions="*,*,*" MaxWidth="380" Gap="10" HorizontalAlignment="Right">
+            <Button IsVisible={!_completed && CanBackground} OnClick={MoveToBackground}>后台</Button>
+            <Button Grid.Column="1" IsVisible={!_completed} IsEnabled={!_cancelRequested} OnClick={TogglePause}>{_paused ? "继续" : "暂停"}</Button>
+            <Button Grid.Column="1" IsVisible={CanOpenFolder} OnClick={OpenResultFolder}>打开文件夹</Button>
+            <Button Grid.Column="2" OnClick={CancelOrClose} IsEnabled={_completed || !_cancelRequested}>{_completed ? "确认" : "取消"}</Button>
+        </ArchiveSurface>
+    </ArchiveSurface>
+    <ArchiveSurface Grid.Row="1" Padding="12" ColumnDefinitions="*,*,*,*" Gap="8" IsVisible={HasConflict} Style="Background: theme(#292D36, #EFEFEF)">
+        <Button OnClick={() => ChooseConflict(ArchiveConflictAction.Replace)} IsEnabled={CanReplaceConflict}>替换文件</Button>
+        <Button Grid.Column="1" OnClick={() => ChooseConflict(ArchiveConflictAction.Skip)} IsEnabled={CanChooseConflict}>跳过</Button>
+        <Button Grid.Column="2" OnClick={() => ChooseConflict(ArchiveConflictAction.KeepBoth)} IsEnabled={CanChooseConflict}>保留两者</Button>
+        <Button Grid.Column="3" OnClick={CancelOrClose} IsEnabled={!_cancelRequested}>取消解压</Button>
+    </ArchiveSurface>
+    <ToolTip Target={EntryLabel}><TextBlock MaxWidth="520" TextWrapping="Wrap" Padding="7">{CurrentEntry}</TextBlock></ToolTip>
+    <ToolTip Target={ConflictPathLabel}><TextBlock MaxWidth="520" TextWrapping="Wrap" Padding="7">{ConflictPath}</TextBlock></ToolTip>
+    @if (OutputLocation.Length > 0) {
+        <ToolTip Target={OutputLabel}><TextBlock MaxWidth="520" TextWrapping="Wrap" Padding="7">{OutputLocation}</TextBlock></ToolTip>
+    }
+</ArchiveSurface>
