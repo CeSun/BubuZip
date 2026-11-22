@@ -32,15 +32,6 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
             return $dialog.ShowDialog()
         }
         $mode = $env:ECLIPSE_DIALOG_MODE
-        if ($mode -eq 'inputs') {
-            $choice = if ($null -ne $owner) {
-                [System.Windows.Forms.MessageBox]::Show($owner, '选择“是”添加文件，选择“否”添加文件夹。', '选择压缩内容', 'YesNoCancel', 'Question')
-            } else {
-                [System.Windows.Forms.MessageBox]::Show('选择“是”添加文件，选择“否”添加文件夹。', '选择压缩内容', 'YesNoCancel', 'Question')
-            }
-            if ($choice -eq 'Cancel') { exit 1 }
-            if ($choice -eq 'No') { $mode = 'folder' } else { $mode = 'files' }
-        }
         if ($mode -eq 'folder') {
             $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
             $dialog.Description = '选择文件夹'
@@ -61,6 +52,7 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
             $dialog = New-Object System.Windows.Forms.OpenFileDialog
             $dialog.Title = if ($mode -eq 'files') { '选择要压缩的文件' } else { '打开压缩包' }
             $dialog.Multiselect = $mode -eq 'files'
+            if ($env:ECLIPSE_DIALOG_DIRECTORY) { $dialog.InitialDirectory = $env:ECLIPSE_DIALOG_DIRECTORY }
             if ($mode -eq 'archive') {
                 $dialog.Filter = '压缩文件|*.zip;*.zipx;*.7z;*.rar;*.tar;*.gz;*.gzip;*.tgz;*.bz2;*.bzip2;*.tbz;*.tbz2;*.xz;*.txz;*.lz;*.lzip;*.tlz;*.zst;*.zstd;*.tzst;*.z;*.taz;*.arc;*.arj;*.ace|所有文件|*.*'
             }
@@ -72,7 +64,7 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
 
     public Task<T> ShowDialogAsync<T>(Func<T> showDialog) => Task.Run(showDialog);
 
-    public IReadOnlyList<string> ChooseInputs() => Choose("inputs");
+    public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null) => Choose("files", initialDirectory);
     public string? ChooseArchive() => Choose("archive").FirstOrDefault();
     public string? ChooseFolder(string? initialDirectory = null) => Choose("folder", initialDirectory).FirstOrDefault();
     public string? ChooseSavePath(string suggestedName, string? initialDirectory = null)

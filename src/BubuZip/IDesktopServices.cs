@@ -3,7 +3,7 @@ namespace BubuZip;
 /// <summary>Platform dialogs and file actions used by the shared application UI.</summary>
 public interface IDesktopServices
 {
-    IReadOnlyList<string> ChooseInputs();
+    IReadOnlyList<string> ChooseFiles(string? initialDirectory = null);
     string? ChooseArchive();
     string? ChooseFolder(string? initialDirectory = null);
     string? ChooseSavePath(string suggestedName, string? initialDirectory = null);

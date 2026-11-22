@@ -10,11 +10,12 @@ public sealed class MacDesktopServices : IDesktopServices
     private const string ObjCLibrary = "/usr/lib/libobjc.A.dylib";
     private static readonly Lazy<nint> AppKit = new(() => NativeLibrary.Load(AppKitPath));
 
-    public IReadOnlyList<string> ChooseInputs()
+    public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null)
     {
         using var scope = EnterAppKit();
-        var panel = CreateOpenPanel("选择要压缩的文件或文件夹", files: true, directories: true, multiple: true);
+        var panel = CreateOpenPanel("选择要压缩的文件", files: true, directories: false, multiple: true);
         SetText(panel, "setPrompt:", "添加");
+        SetInitialDirectory(panel, initialDirectory);
         if (Send(panel, Selector("runModal")) != 1)
             return Array.Empty<string>();
 

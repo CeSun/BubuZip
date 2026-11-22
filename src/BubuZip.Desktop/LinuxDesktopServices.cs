@@ -9,13 +9,11 @@ public sealed class LinuxDesktopServices : IDesktopServices, IAsyncDesktopDialog
     internal LinuxDesktopServices(Func<string, IEnumerable<string>, DesktopProcess.Result> run) => _run = run;
     public Task<T> ShowDialogAsync<T>(Func<T> showDialog) => Task.Run(showDialog);
 
-    public IReadOnlyList<string> ChooseInputs()
+    public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null)
     {
-        var choice = _run("zenity", ["--question", "--title=选择压缩内容", "--text=添加文件还是文件夹？", "--ok-label=文件", "--cancel-label=取消", "--extra-button=文件夹"]);
-        if (choice.Output.Trim() == "文件夹") return ChooseFolder() is { } folder ? [folder] : [];
-        if (choice.ExitCode == 1) return [];
-        DesktopProcess.EnsureSuccess("选择压缩内容", choice);
-        return Choose(["--file-selection", "--multiple", "--separator=" + Separator, "--title=选择要压缩的文件"]);
+        var args = new List<string> { "--file-selection", "--multiple", "--separator=" + Separator, "--title=选择要压缩的文件" };
+        if (!string.IsNullOrEmpty(initialDirectory) && Directory.Exists(initialDirectory)) args.Add("--filename=" + Path.GetFullPath(initialDirectory).TrimEnd('/') + "/");
+        return Choose(args);
     }
     public string? ChooseArchive() => Choose(["--file-selection", "--title=打开压缩包",
         "--file-filter=压缩文件 | *.zip *.zipx *.7z *.rar *.tar *.gz *.gzip *.tgz *.bz2 *.bzip2 *.tbz *.tbz2 *.xz *.txz *.lz *.lzip *.tlz *.zst *.zstd *.tzst *.z *.taz *.arc *.arj *.ace",

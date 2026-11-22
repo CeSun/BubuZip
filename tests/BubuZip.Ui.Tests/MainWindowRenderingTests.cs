@@ -67,7 +67,8 @@ public sealed class MainWindowRenderingTests
             var cancel = Assert.Single(frame.Descendants().OfType<Button>(), b => b.Label == "取消");
             Assert.Equal(start.FinalRect.Y, cancel.FinalRect.Y);
             Assert.True(start.FinalRect.Right < cancel.FinalRect.X);
-            Assert.True(start.IsEffectiveEnabled && cancel.IsEffectiveEnabled);
+            Assert.False(start.IsEffectiveEnabled);
+            Assert.True(cancel.IsEffectiveEnabled);
             Assert.Null(host.Input.HitTest(new Point(bounds.Left - 1, bounds.Top - 1)));
             var cancelOrigin = cancel.PointFromRoot(Point.Zero);
             Assert.Contains(host.Input.HitTest(new Point(-cancelOrigin.X + cancel.FinalRect.Width / 2,
@@ -77,7 +78,8 @@ public sealed class MainWindowRenderingTests
             Assert.True(frame.FinalRect.Height <= height);
             if (height == 320)
                 Assert.True(frame.Descendants().OfType<ScrollViewer>().First().ScrollableHeight > 0);
-            Assert.True(start.IsEffectiveEnabled && cancel.IsEffectiveEnabled);
+            Assert.False(start.IsEffectiveEnabled);
+            Assert.True(cancel.IsEffectiveEnabled);
             cancel.Click(); Render();
             Assert.False(popup.IsOpen);
             Assert.False(frame.IsEffectivelyVisible);
@@ -175,7 +177,7 @@ public sealed class MainWindowRenderingTests
 
     private sealed class FakeDesktopServices : IDesktopServices
     {
-        public IReadOnlyList<string> ChooseInputs() => [];
+        public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null) => [];
         public string? ChooseArchive() => null;
         public string? ChooseFolder(string? initialDirectory = null) => null;
         public string? ChooseSavePath(string suggestedName, string? initialDirectory = null) => null;

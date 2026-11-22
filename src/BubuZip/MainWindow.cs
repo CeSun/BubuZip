@@ -81,7 +81,7 @@ public partial class MainWindow
     private string _newName = "", _editDirectory = "";
     private bool _replaceExisting;
     private string? _archivePassword { get => ActivePane.Password; set => ActivePane.Password = value; }
-    private string _operationArchive = "", _destination = "", _suggestedDestination = "", _password = "", _error = "", _dialogError = "";
+    private string _operationArchive = "", _destination = "", _password = "", _error = "", _dialogError = "";
     private string _progressText = "", _lastClick = "", _resultPath = "", _resultFolder = "";
     private bool _operationSucceeded;
     private string _messageTitle = "", _messageBody = "";
@@ -96,12 +96,10 @@ public partial class MainWindow
         set
         {
             if (value < 0 || value >= Formats.Length || value == _formatIndex) return;
-            var wasSuggested = _destination == _suggestedDestination;
             _formatIndex = value;
             if (_panel == DialogKind.Create && _destination.Length > 0)
             {
-                _destination = wasSuggested && _sources.Length > 0 ? SuggestDestination() : WithArchiveExtension(_destination, SelectedExtension);
-                if (wasSuggested) _suggestedDestination = _destination;
+                _destination = _destinationIsAutomatic ? SuggestDestination() : WithArchiveExtension(_destination, SelectedExtension);
             }
             if (SelectedFormat != ArchiveFormat.SevenZip) _encryptNames = false;
             _compressionLevelIndex = SelectedFormat == ArchiveFormat.SevenZip ? 2 : 3;
@@ -495,6 +493,7 @@ public partial class MainWindow
     private void PrepareCreate()
     {
         if (_busy) return;
+        _sourceNotice = "";
         if (_snapshot?.ArchivePath is not null)
         {
             if (!CanEditArchive) return;
@@ -505,37 +504,10 @@ public partial class MainWindow
         _sources = [];
         _showCreatePassword = false;
         _formatIndex = 0; _compressionLevelIndex = 3; _zipEncryptionIndex = 0; _password = ""; _passwordConfirm = ""; _encryptNames = false; _dialogError = "";
-        var folder = Directory.Exists(InitialPath) ? InitialPath : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        _destination = _suggestedDestination = UniqueDestination(folder, "Archive", ".zip");
+        _destinationIsAutomatic = true;
+        _destination = SuggestDestination();
         _panel = DialogKind.Create; Invalidate();
     }
-    private async void ChooseCreateInputs()
-    {
-        if (_pickerBusy || _busy) return;
-        try
-        {
-            var paths = await ShowPickerAsync(Desktop.ChooseInputs);
-            if (_disposed || paths.Count == 0) return;
-            _sources = _sources.Concat(paths).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
-            if (_panel == DialogKind.Create && _destination == _suggestedDestination)
-            {
-                _destination = _suggestedDestination = SuggestDestination();
-            }
-            Invalidate();
-        }
-        catch (Exception error) { if (!_disposed) { _dialogError = FriendlyError(error); Invalidate(); } }
-    }
-    private string SuggestDestination()
-    {
-        var first = Path.GetFullPath(_sources[0]);
-        var folder = Path.GetDirectoryName(first) ?? InitialPath;
-        var name = _sources.Length == 1
-            ? Directory.Exists(first) ? Path.GetFileName(Path.TrimEndingDirectorySeparator(first))
-                : SingleFileFormat ? Path.GetFileName(first) : Path.GetFileNameWithoutExtension(first)
-            : "Archive";
-        return UniqueDestination(folder, name, SelectedExtension);
-    }
-
     private static string WithArchiveExtension(string path, string extension)
     {
         if (path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return path;
@@ -546,8 +518,8 @@ public partial class MainWindow
 
     private void ClearCreateInputs()
     {
-        _sources = [];
-        Invalidate();
+        if (_busy || _pickerBusy) return;
+        UpdateSources([]);
     }
     private void PrepareExtract()
     {
@@ -581,7 +553,7 @@ public partial class MainWindow
                 var directory = Path.GetDirectoryName(_destination);
                 var path = await ShowPickerAsync(() => Desktop.ChooseSavePath(suggested, directory));
                 if (_disposed) return;
-                if (path is not null) _destination = path;
+                if (path is not null) { _destination = path; _destinationIsAutomatic = false; }
             }
             else
             {
@@ -637,6 +609,8 @@ public partial class MainWindow
             }
             if (mode is DialogKind.Create or DialogKind.AddToArchive && _sources.Length == 0)
                 throw new InvalidOperationException("请先选择要压缩的文件或文件夹。");
+            if (mode == DialogKind.Create && SourceSelectionError.Length > 0)
+                throw new InvalidOperationException(SourceSelectionError);
             if (mode == DialogKind.Create && CanEncryptNewArchive && _password != _passwordConfirm)
                 throw new InvalidOperationException("两次输入的密码不一致。");
             if (mode == DialogKind.Create && _formatIndex == 1 && _encryptNames && PasswordOrNull is null)

@@ -34,16 +34,18 @@ public sealed class DesktopServicesTests
     public void LinuxFileSelectionReturnsAllPathsAndDoesNotInterpretShellCharacters()
     {
         var calls = new List<(string Command, string[] Args)>();
-        var answers = new Queue<DesktopProcess.Result>([new(0, "", ""), new(0, "/tmp/a b\u001f/tmp/$(touch bad)\n", "")]);
+        var answers = new Queue<DesktopProcess.Result>([new(0, "/tmp/a b\u001f/tmp/$(touch bad)\n", "")]);
         var service = new LinuxDesktopServices((command, args) =>
         {
             calls.Add((command, args.ToArray()));
             return answers.Dequeue();
         });
-        Assert.Equal(new[] { "/tmp/a b", "/tmp/$(touch bad)" }, service.ChooseInputs());
-        Assert.Equal("zenity", calls[1].Command);
-        Assert.Contains("--multiple", calls[1].Args);
-        Assert.Contains("--separator=\u001f", calls[1].Args);
+        Assert.Equal(new[] { "/tmp/a b", "/tmp/$(touch bad)" }, service.ChooseFiles());
+        var call = Assert.Single(calls);
+        Assert.Equal("zenity", call.Command);
+        Assert.Contains("--multiple", call.Args);
+        Assert.Contains("--separator=\u001f", call.Args);
+        Assert.DoesNotContain("--question", call.Args);
     }
 
     [Fact]

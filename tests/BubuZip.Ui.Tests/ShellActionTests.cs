@@ -128,7 +128,7 @@ public sealed class ShellActionTests
         fixture.Desktop.Inputs = [source];
         fixture.Open(operationWindows: presenter);
         fixture.Click("新建压缩");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.WaitForIdle();
 
         fixture.Click("开始");
@@ -158,7 +158,7 @@ public sealed class ShellActionTests
         fixture.Desktop.Inputs = [source];
         fixture.Open(operationWindows: presenter);
         fixture.Click("新建压缩");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.WaitForIdle();
         var start = Assert.Single(fixture.VisibleButtons(), button => button.Label == "开始");
 
@@ -210,7 +210,7 @@ public sealed class ShellActionTests
         fixture.Open(new(ArchiveShellAction.Open, [archive]), operationWindows: presenter);
         fixture.WaitForIdle();
         fixture.Click("添加");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.WaitForIdle();
         fixture.Click("保存修改");
         fixture.WaitForIdle();
@@ -234,7 +234,7 @@ public sealed class ShellActionTests
         fixture.Engine.NextCreationFailure = new IOException("输出暂时不可写，请重试。");
         fixture.Open(operationWindows: presenter);
         fixture.Click("新建压缩");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.WaitForIdle();
         var destination = Path.Combine(fixture.Root, "重试.zip");
 
@@ -269,7 +269,7 @@ public sealed class ShellActionTests
         fixture.Desktop.Inputs = [source];
         fixture.Open(operationWindows: presenter);
         fixture.Click("新建压缩");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.WaitForIdle();
 
         fixture.Click("开始");
@@ -570,7 +570,7 @@ public sealed class ShellActionTests
         public int InputPickerCalls;
         public IReadOnlyList<string> Inputs { get; set; } = [];
         public List<string> OpenedPaths { get; } = [];
-        public IReadOnlyList<string> ChooseInputs() { InputPickerCalls++; return Inputs; }
+        public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null) { InputPickerCalls++; return Inputs; }
         public string? ChooseArchive() => null;
         public string? ChooseFolder(string? initialDirectory = null) => null;
         public string? ChooseSavePath(string suggestedName, string? initialDirectory = null) => null;

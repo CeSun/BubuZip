@@ -47,7 +47,7 @@ public sealed class MainWindowLifecycleTests
         fixture.Desktop.Inputs = [fixture.WriteFile("正在处理.txt", "关闭窗口前必须清理的内容")];
         fixture.OpenWindow();
         fixture.Click("新建压缩");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.Click("开始");
 
         Assert.True(engine.Entered.Wait(TimeSpan.FromSeconds(5)), "The archive writer did not start.");
@@ -72,7 +72,7 @@ public sealed class MainWindowLifecycleTests
         var archivePath = Path.Combine(fixture.DirectoryPath, "提交.zip");
         fixture.OpenWindow();
         fixture.Click("新建压缩");
-        fixture.Click("选择文件…");
+        fixture.Click("添加文件…");
         fixture.Click("开始");
 
         // Observe the actual File.Move commit, while intentionally withholding the UI continuation.
@@ -325,7 +325,7 @@ public sealed class MainWindowLifecycleTests
         public int ClipboardCalls { get; private set; }
         public void CopyFiles(IReadOnlyList<string> paths) => ClipboardCalls++;
         public IReadOnlyList<string> Inputs { get; set; } = [];
-        public IReadOnlyList<string> ChooseInputs() => Inputs;
+        public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null) => Inputs;
         public string? ChooseArchive() => ArchiveChoice;
         public string? ChooseFolder(string? initialDirectory = null) => null;
         public string? ChooseSavePath(string suggestedName, string? initialDirectory = null) => null;

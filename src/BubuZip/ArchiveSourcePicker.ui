@@ -1,0 +1,27 @@
+@namespace BubuZip
+@using EclipseUI
+@using EclipseUI.Elements
+
+<StackPanel Gap="10">
+    <TextBlock FontSize="13" TextWrapping="Wrap">{Sources.Count == 0 ? "请选择要添加的文件或文件夹" : $"已选择 {Sources.Count} 个文件或文件夹"}</TextBlock>
+    <WrapPanel Gap="8">
+        <Button OnClick={() => AddFilesRequested()}>添加文件…</Button>
+        <Button OnClick={() => AddFolderRequested()} IsEnabled={CanAddFolder}>添加文件夹…</Button>
+        <Button OnClick={() => ClearRequested()} IsEnabled={Sources.Count > 0}>清空</Button>
+    </WrapPanel>
+    @if (Sources.Count > 0) {
+        <ScrollViewer MaxHeight="180" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Gap="6">
+                @foreach (var source in Sources) {
+                    <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8" Padding="6" Style="Background: theme(#242A3A, #F8FAFD)">
+                        <StackPanel Gap="2">
+                            <TextBlock FontSize="13" TextWrapping="Wrap">{System.IO.Path.GetFileName(source)}</TextBlock>
+                            <TextBlock FontSize="11" TextWrapping="Wrap" Style="Foreground: theme(#FFFFFFB8, #00000099)">{source}</TextBlock>
+                        </StackPanel>
+                        <Button Grid.Column="1" VerticalAlignment="Center" OnClick={() => RemoveRequested(source)}>移除</Button>
+                    </ArchiveSurface>
+                }
+            </StackPanel>
+        </ScrollViewer>
+    }
+</StackPanel>

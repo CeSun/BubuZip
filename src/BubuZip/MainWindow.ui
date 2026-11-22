@@ -109,19 +109,20 @@
                             </StackPanel>
                         }
                         @if (_panel == DialogKind.AddToArchive) {
-                            <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
-                                <TextBlock TextWrapping="Wrap">{SourceSummary}</TextBlock>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Gap="8">
-                                    <Button OnClick={ChooseCreateInputs}>选择文件…</Button>
-                                    <Button IsVisible={_sources.Length > 0} OnClick={ClearCreateInputs}>清空</Button>
-                                </StackPanel>
-                            </ArchiveSurface>
+                            <ArchiveSourcePicker Sources={_sources} AddFilesRequested={ChooseCreateFiles} AddFolderRequested={ChooseCreateFolder} ClearRequested={ClearCreateInputs} RemoveRequested={RemoveCreateSource} />
+                            @if (_sourceNotice.Length > 0) {
+                                <TextBlock FontSize="12" TextWrapping="Wrap">{_sourceNotice}</TextBlock>
+                            }
                         }
                         @if (_panel == DialogKind.Create) {
                             <ArchiveSurface ColumnDefinitions="72,*,64" Gap="8">
                                 <TextBlock FontSize="13" VerticalAlignment="Center">压缩包</TextBlock>
-                                <TextBox Grid.Column="1" @bind-Text={_destination} />
+                                <TextBox Grid.Column="1" @bind-Text={Destination} />
                                 <Button Grid.Column="2" OnClick={ChooseDestination}>浏览…</Button>
+                            </ArchiveSurface>
+                            <ArchiveSurface ColumnDefinitions="*,Auto" Gap="8">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap">{_destinationIsAutomatic ? "自动命名：根据所选项目和压缩格式更新路径。" : "手动设置：添加、移除或清空项目会保留此路径。"}</TextBlock>
+                                <Button Grid.Column="1" OnClick={ResetAutomaticDestination} IsEnabled={!_destinationIsAutomatic}>自动命名</Button>
                             </ArchiveSurface>
                             <ArchiveFormColumns>
                                 <StackPanel Gap="16">
@@ -142,22 +143,15 @@
                                         </Border>
                                     </ArchiveSurface>
                                     <ArchiveGroupBox Header="压缩内容" Style="Background: theme(#1C2233, #F0F4F9)">
-                                        <StackPanel Gap="10">
-                                            <TextBlock FontSize="13" TextWrapping="Wrap">{SourceSummary}</TextBlock>
-                                            <WrapPanel Gap="8">
-                                                <Button OnClick={ChooseCreateInputs}>选择文件…</Button>
-                                                <Button IsVisible={_sources.Length > 0} OnClick={ClearCreateInputs}>清空</Button>
-                                            </WrapPanel>
-                                            @if (_sources.Length > 0) {
-                                                <StackPanel Gap="4">
-                                                    @foreach (var source in _sources.Take(3)) {
-                                                        <TextBlock FontSize="12" TextWrapping="Wrap">{System.IO.Path.GetFileName(source)}</TextBlock>
-                                                    }
-                                                </StackPanel>
-                                            }
-                                        </StackPanel>
+                                        <ArchiveSourcePicker Sources={_sources} CanAddFolder={!SingleFileFormat} AddFilesRequested={ChooseCreateFiles} AddFolderRequested={ChooseCreateFolder} ClearRequested={ClearCreateInputs} RemoveRequested={RemoveCreateSource} />
                                     </ArchiveGroupBox>
-                                    @if (SingleFileFormat) {
+                                    @if (_sourceNotice.Length > 0) {
+                                        <TextBlock FontSize="12" TextWrapping="Wrap">{_sourceNotice}</TextBlock>
+                                    }
+                                    @if (SourceSelectionError.Length > 0) {
+                                        <TextBlock FontSize="12" TextWrapping="Wrap" Style="Foreground: theme(#FFB4AB, #B3261E)">{SourceSelectionError}</TextBlock>
+                                    }
+                                    @if (SingleFileFormat && SourceSelectionError.Length == 0) {
                                         <TextBlock FontSize="12" TextWrapping="Wrap">此格式只能压缩一个文件；多个文件或文件夹请选择 TAR 组合格式。</TextBlock>
                                     }
                                 </StackPanel>
@@ -249,7 +243,7 @@
                     </StackPanel>
                     </ScrollViewer>
                     <ArchiveSurface Grid.Row="1" ColumnDefinitions="*,120,8,96" Padding="16" Style="Background: theme(#1C2233, #F0F4F9)">
-                        <Button Grid.Column="1" IsVisible={_panel != DialogKind.Progress && _panel != DialogKind.Message && _panel != DialogKind.None} OnClick={ConfirmDialog} IsEnabled={!_busy}>{_panel == DialogKind.Create && OperationOnly ? "确定" : DialogConfirmLabel}</Button>
+                        <Button Grid.Column="1" IsVisible={_panel != DialogKind.Progress && _panel != DialogKind.Message && _panel != DialogKind.None} OnClick={ConfirmDialog} IsEnabled={!_busy && CanConfirmDialog}>{_panel == DialogKind.Create && OperationOnly ? "确定" : DialogConfirmLabel}</Button>
                         <Button Grid.Column="1" IsVisible={_panel == DialogKind.Progress && _operationSucceeded} OnClick={OpenResultFolder} IsEnabled={!_busy}>打开文件夹</Button>
                         <Button Grid.Column="3" Ref={DialogDismissButton} OnClick={DismissDialog} IsEnabled={_panel != DialogKind.Progress || _operationSucceeded || !_cancelRequested}>{_operationSucceeded && _panel == DialogKind.Progress ? "确认" : _panel == DialogKind.Message ? "关闭" : "取消"}</Button>
                     </ArchiveSurface>

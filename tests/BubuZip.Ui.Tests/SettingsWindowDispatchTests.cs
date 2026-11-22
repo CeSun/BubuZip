@@ -66,7 +66,7 @@ public sealed class SettingsWindowDispatchTests
 
     private sealed class FakeDesktopServices : IDesktopServices
     {
-        public IReadOnlyList<string> ChooseInputs() => [];
+        public IReadOnlyList<string> ChooseFiles(string? initialDirectory = null) => [];
         public string? ChooseArchive() => null;
         public string? ChooseFolder(string? initialDirectory = null) => null;
         public string? ChooseSavePath(string suggestedName, string? initialDirectory = null) => null;

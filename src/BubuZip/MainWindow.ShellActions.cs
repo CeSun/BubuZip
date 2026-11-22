@@ -28,10 +28,10 @@ public partial class MainWindow
         if (request.Action is ArchiveShellAction.Compress or ArchiveShellAction.CompressSevenZip or ArchiveShellAction.CompressZip)
         {
             PrepareCreate();
-            _sources = paths;
+            _sources = ArchiveSourceSelection.Merge([], paths);
             _formatIndex = request.Action == ArchiveShellAction.CompressSevenZip ? 1 : 0;
             _compressionLevelIndex = _formatIndex == 1 ? 2 : 3;
-            _destination = _suggestedDestination = SuggestDestination();
+            _destination = SuggestDestination();
             Invalidate();
             if (request.Action != ArchiveShellAction.Compress) ConfirmDialog();
             return;
