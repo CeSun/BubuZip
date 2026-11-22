@@ -212,11 +212,50 @@ public sealed class ArchiveSeparator : Element
 public sealed class ArchiveColumnGuides : Element
 {
     public ScrollViewer? ScrollOwner { get; set; }
+    public IReadOnlyList<double> ColumnWidths { get; set; } = [];
     public ArchiveColumnGuides() => IsHitTestVisible = false;
     public override void Render(IElementDrawingContext c)
     {
         var color = IsLightTheme ? new UiColor(232, 240, 248) : new UiColor(58, 64, 78);
-        foreach (var x in new[] { 200, 310, 470, 580, 700 })
+        double x = 0;
+        for (var column = 0; column < ColumnWidths.Count - 1; column++)
+        {
+            x += ColumnWidths[column];
             c.Line(new(x - (ScrollOwner?.HorizontalOffset ?? 0) - .5, 0), new(x - (ScrollOwner?.HorizontalOffset ?? 0) - .5, FinalRect.Height), color);
+        }
     }
+}
+
+public sealed class ArchiveFileRow : Grid { }
+
+/// <summary>A separate hit target keeps resizing from triggering header sorting.</summary>
+public sealed class ArchiveColumnResizeGrip : Element
+{
+    private double _startX, _startWidth;
+    public double ColumnWidth { get; set; }
+    public Action<double> WidthChanged { get; set; } = _ => { };
+
+    public ArchiveColumnResizeGrip()
+    {
+        Width = 8;
+        Cursor = PointerCursor.ResizeHorizontal;
+        HorizontalAlignment = HorizontalAlignment.Right;
+        AddHandler(PointerPressedEvent, args =>
+        {
+            if (args is not PointerEventArgs { Button: PointerButton.Left } pointer) return;
+            _startX = pointer.Position.X;
+            _startWidth = ColumnWidth;
+            args.Handled = true;
+        });
+        AddHandler(PointerMovedEvent, Resize);
+        AddHandler(PointerReleasedEvent, Resize);
+    }
+
+    private void Resize(RoutedEventArgs args)
+    {
+        if (!IsPressed || args is not PointerEventArgs { Button: PointerButton.Left } pointer) return;
+        WidthChanged(_startWidth + pointer.Position.X - _startX);
+        args.Handled = true;
+    }
+
 }

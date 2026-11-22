@@ -11,6 +11,19 @@ public partial class ArchivePane
     public ArchiveCommand UpButton = null!;
     public ScrollViewer HeaderScroll = null!, FileScroll = null!;
     private ArchiveColumnGuides Guides = null!;
+    private readonly double[] _columnWidths = [200, 110, 160, 110, 120, 80];
+    public string FileColumnDefinitions => string.Join(",", _columnWidths.Select(width => width.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+    private double FileColumnsWidth => _columnWidths.Sum();
+
+    private void ResizeColumn(int column, double width)
+    {
+        width = Math.Max(48, Math.Round(width));
+        if (_columnWidths[column] == width) return;
+        _columnWidths[column] = width;
+        Files.UpdateColumnWidths(FileColumnDefinitions);
+        Guides.InvalidateRender();
+        Invalidate();
+    }
     [UiParameter] public Action UpRequested { get; set; } = () => { };
     [UiParameter] public Action<string> SortRequested { get; set; } = _ => { };
     public BrowserSnapshot? Snapshot { get; set; }
@@ -30,6 +43,7 @@ public partial class ArchivePane
     {
         base.OnInitialized();
         Guides.ScrollOwner = FileScroll;
+        Guides.ColumnWidths = _columnWidths;
         FileScroll.PropertyChanged += (_, property) =>
         {
             if (property != ScrollViewer.HorizontalOffsetProperty) return;

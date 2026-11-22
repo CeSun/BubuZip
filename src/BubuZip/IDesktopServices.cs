@@ -22,3 +22,9 @@ public interface IAsyncDesktopDialogService
 {
     Task<T> ShowDialogAsync<T>(Func<T> showDialog);
 }
+
+/// <summary>Publishes existing files to the system clipboard for file-manager paste.</summary>
+public interface IFileClipboardService
+{
+    void CopyFiles(IReadOnlyList<string> paths);
+}

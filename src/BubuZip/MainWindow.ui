@@ -21,10 +21,8 @@
                 </StackPanel>
             </ArchiveSurface>
             <ArchiveSurface IsVisible={_showBrowser} RowDefinitions="48,*,Auto" IsEnabled={!_busy}>
-                <ArchiveSurface ColumnDefinitions="*,Auto">
+                <ArchiveSurface>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Margin="4" OnClick={ReturnHome}>返回首页</Button>
-                        <ArchiveSeparator />
                         <ArchiveCommand Symbol="Add" Label="添加" OnClick={PrepareCreate} IsEnabled={CanAdd} />
                         <ArchiveCommand Symbol="Extract" Label="提取" OnClick={PrepareExtract} IsEnabled={CanExtract} />
                         <ArchiveCommand Symbol="Test" Label="测试" OnClick={PrepareTest} IsEnabled={CanExtract} />
@@ -35,7 +33,6 @@
                         <ArchiveSeparator />
                         <ArchiveCommand Ref={MoreButton} Symbol="More" Label="更多" OnClick={ShowMore} />
                     </StackPanel>
-                    <Button Grid.Column="1" Margin="6" Height="32" OnClick={ChooseAndOpen}>打开压缩包…</Button>
                 </ArchiveSurface>
                 <ArchivePane Grid.Row="1" Ref={RightPane} UpRequested={() => PaneUp(RightPane)} SortRequested={column => PaneSort(RightPane, column)} />
                 <TextBlock Grid.Row="2" Margin="8" FontSize="12">{StatusMessage}</TextBlock>
@@ -55,13 +52,13 @@
                     <MenuItem Label="添加到压缩包…" OnClick={PrepareCreate} IsEnabled={CanAdd} />
                     <MenuItem Label="提取…" OnClick={PrepareExtract} IsEnabled={CanExtract} />
                     <MenuItem Label="测试压缩包" OnClick={PrepareTest} IsEnabled={CanExtract} />
-                    <MenuItem Label="返回首页" OnClick={ReturnHome} />
                 </ContextMenu></Slot>
             </MenuItem>
             <MenuItem Label="编辑">
                 <Slot Name="Submenu"><ContextMenu>
                     <MenuItem Label="全选" OnClick={SelectAll} />
-                    <MenuItem Label="提取所选项目…" OnClick={CopySelected} IsEnabled={CanCopy} />
+                    <MenuItem Label="复制    Ctrl+C" OnClick={CopySelected} IsEnabled={CanCopy} />
+                    <MenuItem Label="提取所选项目…" OnClick={PrepareExtract} IsEnabled={CanExtractSelection} />
                     <MenuItem Label="从压缩包删除…" OnClick={TrashSelected} IsEnabled={CanDelete} />
                     <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
                     <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
@@ -86,7 +83,8 @@
             <MenuItem Label="打开" OnClick={OpenSelected} />
             <MenuItem Label="添加到压缩包…" OnClick={PrepareCreate} IsEnabled={CanAdd} />
             <MenuItem Label="提取…" OnClick={PrepareExtract} IsEnabled={CanExtract} />
-            <MenuItem Label="提取所选项目…" OnClick={CopySelected} IsEnabled={CanCopy} />
+            <MenuItem Label="复制    Ctrl+C" OnClick={CopySelected} IsEnabled={CanCopy} />
+            <MenuItem Label="提取所选项目…" OnClick={PrepareExtract} IsEnabled={CanExtractSelection} />
             <MenuItem Label="从压缩包删除…" OnClick={TrashSelected} IsEnabled={CanDelete} />
             <MenuItem Label="重命名…    F2" OnClick={PrepareRename} IsEnabled={CanRename} />
             <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
@@ -234,7 +232,7 @@
                                 <Button Grid.Column="1" OnClick={ChooseDestination}>浏览…</Button>
                             </ArchiveSurface>
                         }
-                        @if (_panel == DialogKind.Unlock || _panel == DialogKind.EntryPassword || _panel == DialogKind.Extract || _panel == DialogKind.Test || IsArchiveEditDialog) {
+                        @if (_panel == DialogKind.Unlock || _panel == DialogKind.EntryPassword || _panel == DialogKind.CopyFiles || _panel == DialogKind.Extract || _panel == DialogKind.Test || IsArchiveEditDialog) {
                             <TextBlock>密码（无密码可留空）</TextBlock>
                             <PasswordBox @bind-Text={_password} />
                         }

@@ -14,6 +14,31 @@ namespace BubuZip.Ui.Tests;
 
 public sealed class MainWindowLifecycleTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CancellingOrClosingDuringCopyRemovesStagingWithoutChangingClipboard(bool closeWindow)
+    {
+        using var engine = new BlockingExtractEngine();
+        using var fixture = new LifecycleFixture(engine);
+        var archive = Path.Combine(fixture.DirectoryPath, "archive.zip");
+        using (var output = File.Create(archive))
+        using (var content = new MemoryStream(Encoding.UTF8.GetBytes("content")))
+            new SharpCompressArchiveEngine().CreateAsync(output, [new ArchiveWriteEntry("file.txt", content)]).GetAwaiter().GetResult();
+        fixture.Desktop.ArchiveChoice = archive;
+        fixture.OpenWindow();
+        fixture.Click("打开压缩"); fixture.WaitForIdle();
+        fixture.Select("file.txt");
+        fixture.Click("复制");
+        Assert.True(engine.Entered.Wait(TimeSpan.FromSeconds(5)));
+        var workspace = Directory.GetParent(Path.GetDirectoryName(engine.OutputPath)!)!;
+        Assert.StartsWith("BubuZip-clipboard-", workspace.Name);
+        if (closeWindow) fixture.Window.Dispose();
+        else { fixture.Click("取消"); fixture.WaitForIdle(); }
+        Assert.False(Directory.Exists(workspace.FullName));
+        Assert.Equal(0, fixture.Desktop.ClipboardCalls);
+    }
+
     [Fact]
     public void ClosingDuringCreationJoinsEngineCleanupAndRemovesTemporaryOutputWithoutPumpingUi()
     {
@@ -276,6 +301,7 @@ public sealed class MainWindowLifecycleTests
     {
         private readonly IArchiveEngine _inner = new SharpCompressArchiveEngine();
         public ManualResetEventSlim Entered { get; } = new();
+        public string OutputPath { get; private set; } = "";
         public Task CreateAsync(Stream destination, IReadOnlyList<ArchiveWriteEntry> entries,
             ArchiveFormat format = ArchiveFormat.Zip, string? password = null, bool encryptFileNames = false,
             CancellationToken cancellationToken = default) =>
@@ -285,16 +311,19 @@ public sealed class MainWindowLifecycleTests
         public async Task ExtractEntryAsync(Stream source, string entryPath, Stream destination, string? password = null,
             CancellationToken cancellationToken = default)
         {
+            OutputPath = ((FileStream)destination).Name;
             Entered.Set();
             await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
         }
         public void Dispose() => Entered.Dispose();
     }
 
-    private sealed class FakeDesktopServices : IDesktopServices
+    private sealed class FakeDesktopServices : IDesktopServices, IFileClipboardService
     {
         public string? ArchiveChoice { get; set; }
         public List<string> OpenedPaths { get; } = [];
+        public int ClipboardCalls { get; private set; }
+        public void CopyFiles(IReadOnlyList<string> paths) => ClipboardCalls++;
         public IReadOnlyList<string> Inputs { get; set; } = [];
         public IReadOnlyList<string> ChooseInputs() => Inputs;
         public string? ChooseArchive() => ArchiveChoice;

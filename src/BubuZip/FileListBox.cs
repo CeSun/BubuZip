@@ -6,6 +6,14 @@ namespace BubuZip;
 /// <summary>A dense file list that retains the framework's selection and virtualization behavior.</summary>
 public sealed class FileListBox : ListBox
 {
+    public void UpdateColumnWidths(string definitions)
+    {
+        // Include the virtualizer's cached measurement row, even when it is offscreen.
+        foreach (var row in RealizedContainers.SelectMany(container => container.Descendants()).OfType<ArchiveFileRow>())
+            row.ColumnDefinitions = definitions;
+        InvalidateMeasure();
+    }
+
     private static readonly ControlTheme RowTheme = new(typeof(ListBoxItem), new FuncControlTemplate<ListBoxItem>(row =>
     {
         var grid = new Grid();

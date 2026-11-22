@@ -111,7 +111,7 @@ public partial class MainWindow
     private double _progress = -1;
     private ThemeVariant _theme = ThemeVariant.System;
     private DialogKind _panel;
-    private enum DialogKind { None, Create, Extract, Test, Unlock, EntryPassword, Progress, AddToArchive, DeleteEntries, Rename, Message }
+    private enum DialogKind { None, Create, Extract, Test, Unlock, EntryPassword, Progress, AddToArchive, DeleteEntries, Rename, Message, CopyFiles }
 
     public string StatusMessage { get => ActivePane?.Status ?? "就绪"; private set => ActivePane.Status = value; }
     public IReadOnlyList<BrowserItem> VisibleItems { get => ActivePane.Rows; private set => ActivePane.Rows = value; }
@@ -123,7 +123,8 @@ public partial class MainWindow
         (Path.GetExtension(path).Equals(".zip", StringComparison.OrdinalIgnoreCase) ||
          Path.GetExtension(path).Equals(".7z", StringComparison.OrdinalIgnoreCase));
     private bool CanAdd => _showBrowser && CanEditArchive;
-    private bool CanCopy => _showBrowser && !_busy && HasSelection;
+    private bool CanExtractSelection => _showBrowser && !_busy && HasSelection;
+    private bool CanCopy => CanExtractSelection && Desktop is IFileClipboardService;
     private bool CanDelete => CanEditArchive && HasSelection;
     private bool CanRename => HasSelection && SelectedRows.Length == 1 && CanEditArchive;
     private bool CanExtract => !_busy && (_snapshot?.ArchivePath is not null || SelectedRows.Any(row => row.IsArchive));
@@ -135,6 +136,7 @@ public partial class MainWindow
         DialogKind.Unlock => "打开压缩包", DialogKind.EntryPassword => "打开加密文件", DialogKind.Progress => _operationSucceeded ? "操作成功" : "正在处理",
         DialogKind.AddToArchive => "添加到当前压缩包", DialogKind.DeleteEntries => "从压缩包删除", DialogKind.Rename => "重命名",
         DialogKind.Message => _messageTitle,
+        DialogKind.CopyFiles => "复制到剪贴板",
         _ => OperationOnly ? "正在准备…" : "",
     };
     private string DialogDescription => _panel switch
@@ -149,6 +151,7 @@ public partial class MainWindow
         DialogKind.DeleteEntries => $"将从 {Path.GetFileName(_operationArchive)} 中删除所选 {_editEntries.Length} 个项目及其内容。",
         DialogKind.Rename => _editEntries.FirstOrDefault() ?? "",
         DialogKind.Message => "",
+        DialogKind.CopyFiles => OperationArchiveName + $" · 复制 {_copyEntries.Length} 个项目，完成后可在文件管理器中粘贴。加密内容请输入密码。",
         _ => OperationOnly ? StatusMessage : "",
     };
     private bool IsArchiveEditDialog => Path.GetExtension(_operationArchive).Equals(".7z", StringComparison.OrdinalIgnoreCase) &&
@@ -388,8 +391,8 @@ public partial class MainWindow
     private Element CreateRow(object? value, ArchivePane pane)
     {
         var item = (BrowserItem)value!;
-        var grid = new Grid { ColumnDefinitions = "200,110,160,110,120,80", Height = 22, ClipToBounds = true };
-        var name = new Grid { ColumnDefinitions = "22,*" };
+        var grid = new ArchiveFileRow { ColumnDefinitions = pane.FileColumnDefinitions, Height = 22, ClipToBounds = true };
+        var name = new Grid { ColumnDefinitions = "22,*", ClipToBounds = true };
         name.Children.Add(new ArchiveGlyph { Symbol = item.IsDirectory ? ArchiveSymbol.Folder : item.IsArchive ? ArchiveSymbol.Archive : ArchiveSymbol.File, VerticalAlignment = VerticalAlignment.Center });
         var label = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true };
         label.AddRun(item.Name); Grid.SetColumn(label, 1); name.Children.Add(label); grid.Children.Add(name);
@@ -616,6 +619,11 @@ public partial class MainWindow
         var mode = _panel;
         try
         {
+            if (mode == DialogKind.CopyFiles)
+            {
+                await CopySelectionAsync(PasswordOrNull);
+                return;
+            }
             if (mode == DialogKind.EntryPassword)
             {
                 if (PasswordOrNull is null) throw new InvalidOperationException("请输入密码。");
@@ -759,7 +767,6 @@ public partial class MainWindow
     }
     private void CancelOperation() { _cancelRequested = true; _operationCancellation?.Cancel(); Invalidate(); }
 
-    private void CopySelected() => PrepareExtract();
     private void TrashSelected()
     {
         if (!CanDelete) return;
@@ -813,6 +820,7 @@ public partial class MainWindow
             if (key.Key == Key.O) { args.Handled = true; ChooseAndOpen(); }
             else if (key.Key == Key.A) { args.Handled = true; SelectAll(); }
             else if (key.Key == Key.R) { args.Handled = true; Refresh(); }
+            else if (key.Key == Key.C && Files.IsFocusWithin && CanCopy) { args.Handled = true; CopySelected(); }
         }
     }
     private void CycleTheme()
@@ -845,6 +853,6 @@ public partial class MainWindow
         _disposed = true; _operationCancellation?.Cancel(); _lifetime.Cancel();
         _createPopupClosedForOperation?.TrySetResult(false);
         try { _operations.StopAsync().GetAwaiter().GetResult(); }
-        finally { ClearNestedArchives(); _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
+        finally { DiscardPendingClipboardFiles(); ClearNestedArchives(); _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
     }
 }

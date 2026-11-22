@@ -8,7 +8,7 @@ using Microsoft.VisualBasic.FileIO;
 namespace BubuZip.Desktop;
 
 [SupportedOSPlatform("windows")]
-public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDialogService
+public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDialogService, IFileClipboardService
 {
     private const string DialogScript = """
         $ErrorActionPreference = 'Stop'
@@ -103,6 +103,7 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
         var fullPath = Path.GetFullPath(path);
         Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true });
     }
+    public void CopyFiles(IReadOnlyList<string> paths) => WindowsFileClipboard.Copy(paths);
     public void Reveal(string path)
     {
         var fullPath = Path.GetFullPath(path);

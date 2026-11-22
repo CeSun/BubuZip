@@ -15,18 +15,24 @@
     <Border Grid.Row="1" BorderThickness="1" CornerRadius="0" BorderColor="#8B8E94">
         <ArchiveSurface RowDefinitions="26,*" ClipToBounds="true">
             <ScrollViewer Ref={HeaderScroll} HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
-                <ArchiveSurface MinWidth="780" ColumnDefinitions="200,110,160,110,120,80" Style="Background: theme(#1E1E1E, #FFFFFF)">
-                    <ArchiveCommand ShowLabel="true" IsColumnHeader="true" Label={Header("名称", "name")} Width="200" Height="26" OnClick={() => SortRequested("name")} />
-                    <ArchiveCommand Grid.Column="1" ShowLabel="true" IsColumnHeader="true" Label={Header("大小", "size")} LabelAlignment="Right" Width="110" Height="26" OnClick={() => SortRequested("size")} />
-                    <ArchiveCommand Grid.Column="2" ShowLabel="true" IsColumnHeader="true" Label={Header("修改时间", "modified")} Width="160" Height="26" OnClick={() => SortRequested("modified")} />
-                    <ArchiveCommand Grid.Column="3" ShowLabel="true" IsColumnHeader="true" Label={Header("压缩后", "packed")} LabelAlignment="Right" Width="110" Height="26" OnClick={() => SortRequested("packed")} />
-                    <ArchiveCommand Grid.Column="4" ShowLabel="true" IsColumnHeader="true" Label={Header("类型", "type")} Width="120" Height="26" OnClick={() => SortRequested("type")} />
-                    <ArchiveCommand Grid.Column="5" ShowLabel="true" IsColumnHeader="true" Label={Header("属性", "attributes")} Width="80" Height="26" OnClick={() => SortRequested("attributes")} />
+                <ArchiveSurface MinWidth={FileColumnsWidth} ColumnDefinitions={FileColumnDefinitions} Style="Background: theme(#1E1E1E, #FFFFFF)">
+                    <ArchiveCommand ShowLabel="true" IsColumnHeader="true" Label={Header("名称", "name")} Width={_columnWidths[0]} Height="26" OnClick={() => SortRequested("name")} />
+                    <ArchiveCommand Grid.Column="1" ShowLabel="true" IsColumnHeader="true" Label={Header("大小", "size")} LabelAlignment="Right" Width={_columnWidths[1]} Height="26" OnClick={() => SortRequested("size")} />
+                    <ArchiveCommand Grid.Column="2" ShowLabel="true" IsColumnHeader="true" Label={Header("修改时间", "modified")} Width={_columnWidths[2]} Height="26" OnClick={() => SortRequested("modified")} />
+                    <ArchiveCommand Grid.Column="3" ShowLabel="true" IsColumnHeader="true" Label={Header("压缩后", "packed")} LabelAlignment="Right" Width={_columnWidths[3]} Height="26" OnClick={() => SortRequested("packed")} />
+                    <ArchiveCommand Grid.Column="4" ShowLabel="true" IsColumnHeader="true" Label={Header("类型", "type")} Width={_columnWidths[4]} Height="26" OnClick={() => SortRequested("type")} />
+                    <ArchiveCommand Grid.Column="5" ShowLabel="true" IsColumnHeader="true" Label={Header("属性", "attributes")} Width={_columnWidths[5]} Height="26" OnClick={() => SortRequested("attributes")} />
+                    <ArchiveColumnResizeGrip ColumnWidth={_columnWidths[0]} WidthChanged={width => ResizeColumn(0, width)} />
+                    <ArchiveColumnResizeGrip Grid.Column="1" ColumnWidth={_columnWidths[1]} WidthChanged={width => ResizeColumn(1, width)} />
+                    <ArchiveColumnResizeGrip Grid.Column="2" ColumnWidth={_columnWidths[2]} WidthChanged={width => ResizeColumn(2, width)} />
+                    <ArchiveColumnResizeGrip Grid.Column="3" ColumnWidth={_columnWidths[3]} WidthChanged={width => ResizeColumn(3, width)} />
+                    <ArchiveColumnResizeGrip Grid.Column="4" ColumnWidth={_columnWidths[4]} WidthChanged={width => ResizeColumn(4, width)} />
+                    <ArchiveColumnResizeGrip Grid.Column="5" ColumnWidth={_columnWidths[5]} WidthChanged={width => ResizeColumn(5, width)} />
                 </ArchiveSurface>
             </ScrollViewer>
             <ArchiveColumnGuides Grid.Row="1" Ref={Guides} />
             <ScrollViewer Grid.Row="1" Ref={FileScroll} HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <FileListBox Ref={Files} SelectionMode="Extended" MinWidth="780" />
+                <FileListBox Ref={Files} SelectionMode="Extended" Width={FileColumnsWidth} HorizontalAlignment="Left" />
             </ScrollViewer>
         </ArchiveSurface>
     </Border>

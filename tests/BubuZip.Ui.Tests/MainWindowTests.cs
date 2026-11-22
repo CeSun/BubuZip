@@ -15,6 +15,170 @@ namespace BubuZip.Ui.Tests;
 
 public sealed class MainWindowTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CopyPublishesSelectedFilesAndFoldersRelativeToCurrentDirectory(bool keyboard)
+    {
+        using var fixture = new WindowFixture();
+        var archive = fixture.CreateZip(("docs/中文 文件.txt", "text"), ("docs/folder/child.txt", "child"), ("docs/skip.txt", "skip"));
+        var original = File.ReadAllBytes(archive);
+        fixture.OpenWindow(archive);
+        fixture.WaitForIdle();
+        fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
+        fixture.SelectItem("中文 文件.txt");
+        fixture.Files.Selection.Select(fixture.Window.VisibleItems.ToList().FindIndex(item => item.Name == "folder"), toggle: true);
+        fixture.Host.UpdateLayout();
+        if (keyboard)
+        {
+            fixture.Files.RequestFocus();
+            fixture.Host.Input.KeyPress(Key.C, KeyModifiers.Control);
+        }
+        else fixture.Click("复制");
+        fixture.WaitForIdle();
+        Assert.Equal(2, fixture.Desktop.CopiedPaths.Count);
+        Assert.Equal("text", File.ReadAllText(fixture.Desktop.CopiedPaths.Single(path => Path.GetFileName(path) == "中文 文件.txt")));
+        Assert.Equal("child", File.ReadAllText(Path.Combine(fixture.Desktop.CopiedPaths.Single(Directory.Exists), "child.txt")));
+        Assert.DoesNotContain(fixture.Desktop.CopiedPaths, path => Path.GetFileName(path) is "docs" or "skip.txt");
+        Assert.Empty(fixture.Desktop.OpenedPaths);
+        Assert.DoesNotContain("提取文件", fixture.Texts());
+        Assert.Equal("docs/", fixture.Window.CurrentLocation!.ArchivePrefix);
+        Assert.Equal(original, File.ReadAllBytes(archive));
+        fixture.Window.Dispose();
+        Assert.All(fixture.Desktop.CopiedPaths, path => Assert.True(File.Exists(path) || Directory.Exists(path)));
+    }
+
+    [Fact]
+    public void CopyEncryptedFolderRetriesPasswordBeforePublishingAnything()
+    {
+        using var fixture = new WindowFixture();
+        var archive = Path.Combine(fixture.DirectoryPath, "encrypted.zip");
+        File.WriteAllBytes(archive, ArchiveBytes(ArchiveFormat.Zip, "folder/secret.txt", Encoding.UTF8.GetBytes("secret"), "password"));
+        fixture.OpenWindow(archive);
+        fixture.WaitForIdle();
+        fixture.SelectItem("folder");
+        fixture.Click("复制");
+        fixture.WaitForIdle();
+        Assert.Empty(fixture.Desktop.ClipboardAttempts);
+        Assert.Contains("复制到剪贴板", fixture.Texts());
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "wrong";
+        fixture.Click("开始");
+        fixture.WaitForIdle();
+        Assert.Empty(fixture.Desktop.ClipboardAttempts);
+        Assert.Single(fixture.Elements<PasswordBox>()).Text = "password";
+        fixture.Click("开始");
+        fixture.WaitForIdle();
+        Assert.Equal("secret", File.ReadAllText(Path.Combine(Assert.Single(fixture.Desktop.CopiedPaths), "secret.txt")));
+    }
+
+    [Fact]
+    public void ClipboardFailureCleansUnpublishedFilesAndAllowsRetry()
+    {
+        using var fixture = new WindowFixture();
+        fixture.OpenWindow(fixture.CreateZip(("file.txt", "content")));
+        fixture.WaitForIdle();
+        fixture.SelectItem("file.txt");
+        fixture.Desktop.ClipboardFailure = new IOException("clipboard busy");
+        fixture.Click("复制");
+        fixture.WaitForIdle();
+        Assert.Empty(fixture.Desktop.CopiedPaths);
+        Assert.All(Assert.Single(fixture.Desktop.ClipboardAttempts), path => Assert.False(File.Exists(path)));
+        Assert.Contains("clipboard busy", fixture.Texts());
+        fixture.Desktop.ClipboardFailure = null;
+        fixture.Click("开始");
+        fixture.WaitForIdle();
+        Assert.Equal("content", File.ReadAllText(Assert.Single(fixture.Desktop.CopiedPaths)));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void DraggingColumnEdgesResizesRowsWithoutSortingOrChangingSelection(int column)
+    {
+        using var fixture = new WindowFixture();
+        fixture.OpenWindow(fixture.CreateZip(("alpha.txt", "alpha"), ("beta.txt", "beta")));
+        fixture.WaitForIdle();
+        fixture.SelectItem("beta.txt");
+        var pane = Assert.Single(fixture.Elements<ArchivePane>());
+        var selection = fixture.Files.SelectedItem;
+        var grip = fixture.Elements<ArchiveColumnResizeGrip>().ElementAt(column);
+        var header = fixture.Elements<ArchiveCommand>().Where(command => command.IsColumnHeader).ElementAt(column);
+        var width = header.FinalRect.Width;
+        var origin = grip.PointFromRoot(Point.Zero);
+        var start = new Point(-origin.X + 4, -origin.Y + 12);
+        fixture.Host.PointerMove(start);
+        Assert.Equal(PointerCursor.ResizeHorizontal, fixture.Host.Input.Cursor);
+        fixture.Host.PointerPress(start);
+        Assert.Same(grip, fixture.Host.Input.Captured);
+        fixture.Host.PointerMove(new(start.X + 70, start.Y + 40));
+        Assert.Equal(PointerCursor.ResizeHorizontal, fixture.Host.Input.Cursor);
+        fixture.Host.UpdateLayout();
+        Assert.Equal(width + 70, header.FinalRect.Width);
+        fixture.Host.PointerRelease(new(start.X + 70, start.Y + 40));
+        Assert.Equal(PointerCursor.Arrow, fixture.Host.Input.Cursor);
+        fixture.Host.UpdateLayout();
+        Assert.Equal("name", pane.SortColumn);
+        Assert.False(pane.SortDescending);
+        Assert.Same(selection, fixture.Files.SelectedItem);
+        Assert.All(fixture.Elements<ArchiveFileRow>(), row =>
+        {
+            Assert.Equal(pane.FileColumnDefinitions, row.ColumnDefinitions);
+            Assert.Equal(header.FinalRect.Right, row.Children[column].FinalRect.Right + (column == 0 ? 0 : 3), 5);
+        });
+
+        // Sorting still works and newly ordered rows retain the chosen widths.
+        var headerOrigin = header.PointFromRoot(Point.Zero);
+        var center = new Point(-headerOrigin.X + 20, -headerOrigin.Y + 12);
+        fixture.Host.PointerPress(center);
+        fixture.Host.PointerRelease(center);
+        fixture.Host.UpdateLayout();
+        Assert.Equal(new[] { "name", "size", "modified", "packed", "type", "attributes" }[column], pane.SortColumn);
+        Assert.All(fixture.Elements<ArchiveFileRow>(), row => Assert.Equal(pane.FileColumnDefinitions, row.ColumnDefinitions));
+    }
+
+    [Fact]
+    public void ColumnResizingClampsWidthAndSurvivesScrollingAndCaptureCancellation()
+    {
+        using var fixture = new WindowFixture();
+        fixture.OpenWindow(fixture.CreateZip(Enumerable.Range(0, 200).Select(index => ($"file{index:D3}.txt", (string?)"data")).ToArray()));
+        fixture.WaitForIdle();
+        fixture.Host.AvailableSize = new Size(600, 740);
+        fixture.Host.UpdateLayout();
+        var pane = Assert.Single(fixture.Elements<ArchivePane>());
+        Assert.True(pane.Files.IsVirtualizing);
+        pane.FileScroll.ScrollToHorizontalOffset(100);
+        fixture.Host.UpdateLayout();
+        var grip = fixture.Elements<ArchiveColumnResizeGrip>().First();
+        var origin = grip.PointFromRoot(Point.Zero);
+        var start = new Point(-origin.X + 4, -origin.Y + 12);
+        fixture.Host.PointerPress(start);
+        Assert.Same(grip, fixture.Host.Input.Captured);
+        fixture.Host.PointerMove(new(start.X + 350, start.Y));
+        fixture.Host.UpdateLayout();
+        fixture.Host.Input.CancelPointerCapture();
+        fixture.Host.PointerMove(new(start.X + 400, start.Y));
+        fixture.Host.UpdateLayout();
+        Assert.Equal(550, grip.ColumnWidth);
+        pane.FileScroll.ScrollToVerticalOffset(3000);
+        fixture.Host.UpdateLayout();
+        Assert.All(fixture.Elements<ArchiveFileRow>(), row => Assert.StartsWith("550,", row.ColumnDefinitions));
+
+        origin = grip.PointFromRoot(Point.Zero);
+        start = new Point(-origin.X + 4, -origin.Y + 12);
+        fixture.Host.PointerPress(start);
+        Assert.Same(grip, fixture.Host.Input.Captured);
+        fixture.Host.PointerMove(new(start.X - 1000, start.Y));
+        fixture.Host.PointerRelease(new(start.X - 1000, start.Y));
+        fixture.Host.UpdateLayout();
+        Assert.Equal(48, grip.ColumnWidth);
+        Assert.Equal(pane.FileScroll.HorizontalOffset, pane.HeaderScroll.HorizontalOffset);
+        Assert.All(fixture.Elements<ArchiveFileRow>(), row => Assert.StartsWith("48,", row.ColumnDefinitions));
+    }
+
     [Fact]
     public void DesktopCreateOpensAnIndependentWindowAndKeepsTheHomeUsable()
     {
@@ -42,7 +206,7 @@ public sealed class MainWindowTests
         fixture.SelectItem("readme.txt");
         var selected = fixture.Files.SelectedItem;
         fixture.Desktop.ArchiveChoice = second;
-        fixture.Click("打开压缩包…");
+        fixture.ClickFileCommand("打开压缩包…");
         fixture.WaitForIdle();
         Assert.Equal([second], windows.OpenPaths);
         Assert.Equal(first, fixture.Window.CurrentLocation!.ArchivePath);
@@ -354,13 +518,8 @@ public sealed class MainWindowTests
         Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
         Assert.Throws<InvalidOperationException>(() => fixture.Run(fixture.Window.NavigateToAsync(fixture.DirectoryPath)));
         Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
-        fixture.Click("返回首页");
-        Assert.Null(fixture.Window.CurrentLocation);
-        Assert.False(pane.IsEffectivelyVisible);
-        fixture.Click("新建压缩");
-        Assert.Contains("添加到压缩包", fixture.Texts());
-        Assert.DoesNotContain("添加到当前压缩包", fixture.Texts());
-        fixture.Click("取消");
+        Assert.DoesNotContain(fixture.Elements<Button>(), button => button.Label == "返回首页");
+        Assert.All(fixture.Elements<ContextMenu>(), menu => Assert.DoesNotContain(menu.Items.OfType<MenuItem>(), item => item.Label == "返回首页"));
     }
 
     [Fact]
@@ -394,7 +553,7 @@ public sealed class MainWindowTests
         fixture.Run(fixture.Window.NavigateUpAsync());
         Assert.Equal(root, fixture.Window.CurrentLocation!.ArchivePath);
         Assert.False(Assert.Single(fixture.Elements<ArchivePane>()).UpButton.IsEffectiveEnabled);
-        fixture.Click("返回首页");
+        fixture.Window.Dispose();
         Assert.False(File.Exists(secondPath));
         Assert.False(File.Exists(thirdPath));
     }
@@ -914,7 +1073,7 @@ public sealed class MainWindowTests
         fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
         fixture.Run(fixture.Window.OpenItemAsync(Assert.Single(fixture.Window.VisibleItems)));
         fixture.Desktop.ArchiveChoice = second;
-        fixture.Click("打开压缩包…"); fixture.WaitForIdle();
+        fixture.ClickFileCommand("打开压缩包…"); fixture.WaitForIdle();
         Assert.Equal(second, fixture.Window.CurrentLocation!.ArchivePath);
         Assert.Equal("", fixture.Window.CurrentLocation.ArchivePrefix);
         fixture.Click("更多");
@@ -933,7 +1092,7 @@ public sealed class MainWindowTests
         fixture.Desktop.ArchiveChoice = archive;
         fixture.OpenWindow(); fixture.Click("打开压缩"); fixture.WaitForIdle();
         fixture.Desktop.ArchiveChoice = invalid;
-        fixture.Click("打开压缩包…"); fixture.WaitForIdle();
+        fixture.ClickFileCommand("打开压缩包…"); fixture.WaitForIdle();
         Assert.Equal(archive, fixture.Window.CurrentLocation!.ArchivePath);
         Assert.Equal("inside.txt", Assert.Single(fixture.Window.VisibleItems).Name);
         Assert.True(Assert.Single(fixture.Elements<ArchivePane>()).IsEffectivelyVisible);
@@ -1172,6 +1331,15 @@ public sealed class MainWindowTests
             Host.UpdateLayout();
         }
 
+        public void ClickFileCommand(string label)
+        {
+            var menu = Assert.Single(Elements<ContextMenu>(), candidate => candidate.Items.OfType<MenuItem>().Any(item => item.Label == "文件"));
+            var file = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.Label == "文件");
+            var commands = Assert.IsType<ContextMenu>(file.Submenu);
+            Assert.Single(commands.Items.OfType<MenuItem>(), item => item.Label == label).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Host.UpdateLayout();
+        }
+
         public void ClickEnabled(string label)
         {
             var button = Assert.Single(Elements<Button>(), candidate => candidate is not MenuItem &&
@@ -1261,6 +1429,12 @@ public sealed class MainWindowTests
             _ui?.Dispose();
             Host?.Dispose();
             Window?.Dispose();
+            foreach (var paths in Desktop.ClipboardAttempts)
+            {
+                var workspace = Directory.GetParent(Path.GetDirectoryName(paths[0])!)!;
+                Assert.StartsWith("BubuZip-clipboard-", workspace.Name);
+                if (workspace.Exists) workspace.Delete(recursive: true);
+            }
             Directory.Delete(DirectoryPath, recursive: true);
         }
 
@@ -1294,7 +1468,7 @@ public sealed class MainWindowTests
         public void Open(string archivePath) => OpenPaths.Add(archivePath);
     }
 
-    private sealed class FakeDesktopServices : IDesktopServices, IAsyncDesktopDialogService
+    private sealed class FakeDesktopServices : IDesktopServices, IAsyncDesktopDialogService, IFileClipboardService
     {
         public TaskCompletionSource<bool>? DialogGate { get; set; }
         public async Task<T> ShowDialogAsync<T>(Func<T> showDialog)
@@ -1310,6 +1484,15 @@ public sealed class MainWindowTests
         public int TrashCalls { get; private set; }
         public List<string> OpenedPaths { get; } = [];
         public Exception? OpenFailure { get; set; }
+        public Exception? ClipboardFailure { get; set; }
+        public IReadOnlyList<string> CopiedPaths { get; private set; } = [];
+        public List<IReadOnlyList<string>> ClipboardAttempts { get; } = [];
+        public void CopyFiles(IReadOnlyList<string> paths)
+        {
+            ClipboardAttempts.Add(paths.ToArray());
+            if (ClipboardFailure is not null) throw ClipboardFailure;
+            CopiedPaths = paths.ToArray();
+        }
 
         public IReadOnlyList<string> ChooseInputs() => Inputs;
         public string? ChooseArchive() { ArchiveChoices++; return ArchiveChoice; }
