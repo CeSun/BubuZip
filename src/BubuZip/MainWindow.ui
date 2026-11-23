@@ -91,7 +91,7 @@
             <MenuItem Label="属性" OnClick={ShowProperties} IsEnabled={HasSelection} />
         </ContextMenu>
         <ArchiveDialogPopup Ref={CreatePopup} StaysOpen={_pickerBusy || _busy} OnClosed={CloseCreatePopup} />
-        <ArchiveSurface Ref={DialogOverlay} IsVisible={_standaloneOperation is null && (OperationOnly || _panel != DialogKind.None && !UsesCreatePopup)} Style="Background: #00000066">
+        <ArchiveSurface Ref={DialogOverlay} IsVisible={_standaloneOperation is null && (_panel != DialogKind.None || _busy || _openingRequestedArchive) && (OperationOnly || _panel != DialogKind.None && !UsesCreatePopup)} Style="Background: #00000066">
             <ArchiveDialogBorder Ref={DialogFrame} UsePopupLayout={UsesCreatePopup} IsEnabled={!_pickerBusy} MaxWidth={OperationOnly ? double.PositiveInfinity : 560} MaxHeight={UsesCreatePopup ? 620 : double.PositiveInfinity} Margin={OperationOnly || UsesCreatePopup ? 0 : 16} HorizontalAlignment="Stretch" VerticalAlignment={OperationOnly ? VerticalAlignment.Stretch : VerticalAlignment.Center} CornerRadius={OperationOnly ? 0 : 8} BorderThickness={OperationOnly ? 0 : 1} BorderColor="#80808060" Style="Background: theme(#1C2233, #F0F4F9)">
                 <ArchiveSurface RowDefinitions="*,Auto">
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled">

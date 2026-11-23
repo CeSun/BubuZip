@@ -290,6 +290,23 @@ public sealed class ShellActionTests
         Assert.Equal(choice == "保留两者", File.Exists(Path.Combine(fixture.Root, "same (2).txt")));
         Assert.Empty(Directory.EnumerateDirectories(fixture.Root, ".bubuzip-*"));
         Assert.Empty(presenter.Operations);
+        Assert.False(fixture.Window.IsDisposed);
+        if (choice != "取消解压")
+        {
+            var completedTitle = choice == "跳过" ? "解压完成（有跳过）" : "操作成功";
+            Assert.Contains(completedTitle, fixture.VisibleTexts());
+            fixture.Click("确认");
+            // The next UI turn queues native closure. It must not render the
+            // empty startup frame while that closure is still pending.
+            Assert.False(fixture.Window.IsDisposed);
+            Assert.False(view.IsDisposed);
+            Assert.Equal(completedTitle, fixture.Window.Title);
+            Assert.Equal(680, fixture.Window.Width);
+            Assert.Contains(completedTitle, fixture.VisibleTexts());
+            fixture.WaitForIdle();
+            Assert.True(fixture.Window.IsDisposed);
+            Assert.True(view.IsDisposed);
+        }
     }
 
     [Fact]
@@ -626,7 +643,7 @@ public sealed class ShellActionTests
     }
 
     [Fact]
-    public void ExtractToFolderCreatesANewUniqueDirectoryAndPreservesTheExistingOne()
+    public void ExtractToFolderMergesTheNamedDirectoryAndPreservesUnrelatedFiles()
     {
         using var fixture = new ShellFixture();
         var archive = fixture.WriteZip("bundle.zip", ("inside.txt", "content"));
@@ -637,8 +654,8 @@ public sealed class ShellActionTests
         fixture.WaitForIdle();
 
         Assert.Equal("keep", File.ReadAllText(Path.Combine(fixture.Root, "bundle", "keep.txt")));
-        Assert.False(File.Exists(Path.Combine(fixture.Root, "bundle", "inside.txt")));
-        var output = Path.Combine(fixture.Root, "bundle 2");
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, "bundle 2")));
+        var output = Path.Combine(fixture.Root, "bundle");
         Assert.Equal("content", File.ReadAllText(Path.Combine(output, "inside.txt")));
         Assert.Contains(output, fixture.Desktop.OpenedPaths);
         Assert.Equal("提取完成。", fixture.Window.StatusMessage);

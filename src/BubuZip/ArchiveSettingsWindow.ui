@@ -44,7 +44,7 @@
                                 <ArchiveGroupBox Header="菜单命令" Style="Background: theme(#1C2233, #F0F4F9)">
                                     <StackPanel Gap="10">
                                         <TextBlock FontSize="13">打开压缩包</TextBlock>
-                                        <TextBlock FontSize="13" TextWrapping="Wrap">提取文件… / 智能解压 / 提取到此处 / 提取到同名文件夹</TextBlock>
+                                        <TextBlock FontSize="13" TextWrapping="Wrap">提取文件… / 提取到当前位置 / 提取到当前位置(智能) / 提取到同名文件夹</TextBlock>
                                         <TextBlock FontSize="13">测试压缩包</TextBlock>
                                         <TextBlock FontSize="13" TextWrapping="Wrap">添加到压缩包… / 压缩为 ZIP / 压缩为 7z</TextBlock>
                                     </StackPanel>

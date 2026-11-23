@@ -5,7 +5,7 @@ namespace BubuZip;
 
 public partial class MainWindow
 {
-    private bool _shellExtractHere, _shellExtractSmart;
+    private bool _shellExtractHere, _shellExtractSmart, _shellExtractFolder;
 
     private async Task HandleShellRequestAsync(ArchiveShellRequest request, bool newWindow = false)
     {
@@ -47,8 +47,9 @@ public partial class MainWindow
         _extractPathIndex = 0;
         _shellExtractHere = request.Action is ArchiveShellAction.ExtractHere or ArchiveShellAction.ExtractSmart;
         _shellExtractSmart = request.Action == ArchiveShellAction.ExtractSmart;
+        _shellExtractFolder = request.Action == ArchiveShellAction.ExtractFolder;
         _destination = _shellExtractHere ? Path.GetDirectoryName(archive)!
-            : UniqueDestination(Path.GetDirectoryName(archive)!, ArchiveBaseName(archive), "");
+            : Path.Combine(Path.GetDirectoryName(archive)!, ArchiveBaseName(archive));
         _panel = request.Action == ArchiveShellAction.Test ? DialogKind.Test : DialogKind.Extract;
         Invalidate();
         if (request.Action != ArchiveShellAction.Extract) ConfirmDialog();

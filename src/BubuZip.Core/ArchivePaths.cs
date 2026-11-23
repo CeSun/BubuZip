@@ -3,6 +3,13 @@ namespace BubuZip.Core;
 /// <summary>Normalizes macOS system entry aliases without resolving user-controlled symbolic links.</summary>
 public static class ArchivePaths
 {
+    public static string GetArchiveBaseName(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (name.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+        return string.IsNullOrWhiteSpace(name) || name is "." or ".." ? "Archive" : name;
+    }
+
     private static readonly (string Alias, string Target)[] MacSystemAliases =
         [("/tmp", "/private/tmp"), ("/var", "/private/var"), ("/etc", "/private/etc")];
 

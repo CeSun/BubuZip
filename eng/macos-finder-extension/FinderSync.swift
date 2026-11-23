@@ -44,8 +44,8 @@ final class BubuZipFinderSync: FIFinderSync {
         if allArchives {
             add("打开压缩包", action: .open, kind: menuKind, to: actions)
             add("提取文件…", action: .extract, kind: menuKind, to: actions)
-            add("提取到此处", action: .extractHere, kind: menuKind, to: actions)
-            add("智能解压", action: .extractSmart, kind: menuKind, to: actions)
+            add("提取到当前位置", action: .extractHere, kind: menuKind, to: actions)
+            add("提取到当前位置(智能)", action: .extractSmart, kind: menuKind, to: actions)
             let name = urls.count == 1 ? archiveBaseName(urls[0]) : "各自同名文件夹"
             add("提取到“\(name)/”", action: .extractFolder, kind: menuKind, to: actions)
             add("测试压缩包", action: .test, kind: menuKind, to: actions)

@@ -3,21 +3,31 @@ namespace BubuZip.Core;
 public sealed partial class ArchiveFileService
 {
     /// <summary>Extract one top-level item here; group multiple top-level items in an archive-named folder.</summary>
-    public Task ExtractSmartAsync(string archivePath, string destinationDirectory, string? password = null,
+    public Task<string> ExtractSmartAsync(string archivePath, string destinationDirectory, string? password = null,
         IProgress<ArchiveOperationProgress>? progress = null, CancellationToken cancellationToken = default,
         ArchiveExtractSettings? settings = null, IArchiveExtractionInteraction? interaction = null) => Task.Run(() =>
         ExtractIntoExistingAsync(archivePath, destinationDirectory, password, null, progress,
             cancellationToken, settings, interaction, smart: true), cancellationToken);
 
-    public Task ExtractHereAsync(string archivePath, string destinationDirectory, string? password = null,
+    public Task<string> ExtractHereAsync(string archivePath, string destinationDirectory, string? password = null,
         IProgress<ArchiveOperationProgress>? progress = null, CancellationToken cancellationToken = default,
         ArchiveExtractSettings? settings = null, IArchiveExtractionInteraction? interaction = null) => Task.Run(() =>
         ExtractIntoExistingAsync(archivePath, destinationDirectory, password, null, progress,
             cancellationToken, settings, interaction), cancellationToken);
 
-    private async Task ExtractIntoExistingAsync(string archivePath, string destinationDirectory, string? password,
+    /// <summary>Extract into the specified folder, merging directories and asking about existing files.</summary>
+    public Task<string> ExtractToFolderAsync(string archivePath, string destinationDirectory, string? password = null,
+        IProgress<ArchiveOperationProgress>? progress = null, CancellationToken cancellationToken = default,
+        ArchiveExtractSettings? settings = null, IArchiveExtractionInteraction? interaction = null) => Task.Run(() =>
+    {
+        var destination = ArchivePaths.ResolveUserPath(destinationDirectory);
+        return ExtractIntoExistingAsync(archivePath, Path.GetDirectoryName(destination)!, password, null, progress,
+            cancellationToken, settings, interaction, folderName: Path.GetFileName(destination));
+    }, cancellationToken);
+
+    private async Task<string> ExtractIntoExistingAsync(string archivePath, string destinationDirectory, string? password,
         IReadOnlyList<string>? entryPaths, IProgress<ArchiveOperationProgress>? progress, CancellationToken cancellationToken,
-        ArchiveExtractSettings? settings, IArchiveExtractionInteraction? interaction, bool smart = false)
+        ArchiveExtractSettings? settings, IArchiveExtractionInteraction? interaction, bool smart = false, string? folderName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var destination = ArchivePaths.ResolveUserPath(destinationDirectory);
@@ -40,18 +50,16 @@ public sealed partial class ArchiveFileService
                 cancellationToken, settings).ConfigureAwait(false);
             var roots = Directory.EnumerateFileSystemEntries(payload).Order(StringComparer.Ordinal).ToArray();
             var output = destination;
-            if (smart && roots.Length > 1)
+            if (folderName is not null || smart && roots.Length > 1)
             {
-                var name = Path.GetFileNameWithoutExtension(archivePath);
-                if (name.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
-                if (string.IsNullOrWhiteSpace(name) || name is "." or "..") name = "Archive";
+                var name = folderName ?? ArchivePaths.GetArchiveBaseName(archivePath);
                 output = Path.Combine(destination, name);
             }
             foreach (var path in Directory.EnumerateFileSystemEntries(payload, "*", SearchOption.AllDirectories))
                 reserved.Add(Path.Combine(output, Path.GetRelativePath(payload, path)));
 
             // Resolve every conflict before modifying any existing destination file.
-            if (output != destination) await Plan(payload, output).ConfigureAwait(false);
+            if (output != destination) output = await Plan(payload, output).ConfigureAwait(false) ?? destination;
             else foreach (var path in roots)
                 await Plan(path, Path.Combine(destination, Path.GetFileName(path))).ConfigureAwait(false);
 
@@ -76,6 +84,7 @@ public sealed partial class ArchiveFileService
                 undo.Push((placement.Target, placement.Source, placement.Directory));
             }
             interaction?.ReportExtractionSummary(new(replaced, skipped, renamed));
+            return output;
         }
         catch (Exception original)
         {
@@ -104,7 +113,7 @@ public sealed partial class ArchiveFileService
             if (!preserveStaging && Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
         }
 
-        async Task Plan(string source, string target)
+        async Task<string?> Plan(string source, string target)
         {
             cancellationToken.ThrowIfCancellationRequested();
             EnsureNoLinks(target);
@@ -114,16 +123,16 @@ public sealed partial class ArchiveFileService
             if (!existingDirectory && !existingFile)
             {
                 placements.Add(new(source, target, incomingDirectory));
-                return;
+                return target;
             }
-            if (interaction is null)
-                throw new IOException($"目标位置已有同名项目：{target}\n本次未写入任何文件，已有内容保持不变。请选择其他输出位置。");
             if (incomingDirectory && existingDirectory)
             {
                 foreach (var child in Directory.EnumerateFileSystemEntries(source).Order(StringComparer.Ordinal))
                     await Plan(child, Path.Combine(target, Path.GetFileName(child))).ConfigureAwait(false);
-                return;
+                return target;
             }
+            if (interaction is null)
+                throw new IOException($"目标位置已有同名项目：{target}\n本次未写入任何文件，已有内容保持不变。请选择其他输出位置。");
             var conflict = new ArchiveExtractionConflict(Path.GetRelativePath(payload, source), target,
                 incomingDirectory, existingDirectory, incomingDirectory ? null : new FileInfo(source).Length,
                 existingFile ? new FileInfo(target).Length : null,
@@ -139,7 +148,7 @@ public sealed partial class ArchiveFileService
             {
                 case ArchiveConflictAction.Skip:
                     skipped++;
-                    return;
+                    return null;
                 case ArchiveConflictAction.KeepBoth:
                     var parent = Path.GetDirectoryName(target)!;
                     var extension = incomingDirectory ? "" : Path.GetExtension(target);
@@ -151,11 +160,11 @@ public sealed partial class ArchiveFileService
                     reserved.Add(candidate);
                     placements.Add(new(source, candidate, incomingDirectory));
                     renamed++;
-                    return;
+                    return candidate;
                 case ArchiveConflictAction.Replace when conflict.CanReplace:
                     placements.Add(new(source, target, false, conflict.ExistingSize, conflict.ExistingModified));
                     replaced++;
-                    return;
+                    return target;
                 default:
                     throw new IOException("文件与文件夹类型不同，不能直接替换。请选择“跳过”或“保留两者”。");
             }

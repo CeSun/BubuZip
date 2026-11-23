@@ -46,6 +46,7 @@ public partial class MainWindow
         _standaloneOperationClosed = closed;
         StandaloneOperationHost.Content = view;
         Invalidate();
+        var closeWindow = false;
         try
         {
             var result = await closed.Task;
@@ -53,7 +54,11 @@ public partial class MainWindow
             if (result.Succeeded)
             {
                 StatusMessage = operation.SuccessMessage;
-                if (_openRequests.IsEmpty) ArchiveWindowClose.Request(this);
+                if (_openRequests.IsEmpty)
+                {
+                    closeWindow = true;
+                    ArchiveWindowClose.Request(this);
+                }
                 return true;
             }
             _panel = returnPanel;
@@ -64,13 +69,19 @@ public partial class MainWindow
         finally
         {
             _standaloneOperationClosed = null;
-            _standaloneOperation = null;
-            _standaloneOperationView = null;
-            // ContentControl detaches caller-owned content; release the completed view here.
-            view.Dispose();
-            _standaloneOperationClosing = true;
             _busy = false;
-            if (!_disposed) Invalidate();
+            // Closing is posted to the next UI turn. Keep the final content and
+            // title until disposal, otherwise this turn paints a blank "Preparing"
+            // window and resizes it before the native HWND is destroyed.
+            if (!closeWindow)
+            {
+                _standaloneOperation = null;
+                _standaloneOperationView = null;
+                StandaloneOperationHost.Content = null;
+                view.Dispose();
+                _standaloneOperationClosing = true;
+                if (!_disposed) Invalidate();
+            }
         }
     }
 }

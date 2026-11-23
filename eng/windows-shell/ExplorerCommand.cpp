@@ -19,8 +19,8 @@ struct Action { const wchar_t* title; const wchar_t* verb; bool archiveOnly; };
 static constexpr Action actions[] = {
     {L"打开压缩包", L"open", true},
     {L"提取文件…", L"extract", true},
-    {L"提取到此处", L"extract-here", true},
-    {L"智能解压", L"extract-smart", true},
+    {L"提取到当前位置", L"extract-here", true},
+    {L"提取到当前位置(智能)", L"extract-smart", true},
     {L"提取到同名文件夹", L"extract-folder", true},
     {L"测试压缩包", L"test", true},
     {L"添加到压缩包…", L"compress", false},

@@ -529,7 +529,7 @@ public partial class MainWindow
     private void PrepareExtract()
     {
         if (_busy) return;
-        _shellExtractHere = _shellExtractSmart = false;
+        _shellExtractHere = _shellExtractSmart = _shellExtractFolder = false;
         _operationArchive = _snapshot?.ArchivePath ?? SelectedRows.FirstOrDefault(row => row.IsArchive)?.Path ?? "";
         if (_operationArchive.Length == 0) return;
         _extractEntries = _snapshot?.ArchivePath is not null
@@ -567,8 +567,7 @@ public partial class MainWindow
                 if (_disposed) return;
                 if (folder is not null)
                 {
-                    _shellExtractHere = _shellExtractSmart = false;
-                    _destination = UniqueDestination(folder, ArchiveBaseName(OperationArchiveName), "");
+                    _destination = _shellExtractHere ? folder : Path.Combine(folder, ArchiveBaseName(OperationArchiveName));
                 }
             }
             Invalidate();
@@ -629,6 +628,7 @@ public partial class MainWindow
             var extractSettings = new ArchiveExtractSettings((ExtractionPathMode)_extractPathIndex, _snapshot?.ArchivePrefix ?? "");
             var destination = mode is DialogKind.Create or DialogKind.Extract ? Path.GetFullPath(_destination) : "";
             if (mode == DialogKind.Create) destination = WithArchiveExtension(destination, SelectedExtension);
+            var actualDestination = destination;
             var progress = new Progress<ArchiveOperationProgress>(report =>
             {
                 if (_disposed || !_busy || _panel != DialogKind.Progress) return;
@@ -643,8 +643,9 @@ public partial class MainWindow
                 else if (mode == DialogKind.Extract)
                 {
                     var interaction = operationProgress as IArchiveExtractionInteraction;
-                    if (_shellExtractSmart) await FileService.ExtractSmartAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
-                    else if (_shellExtractHere) await FileService.ExtractHereAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
+                    if (_shellExtractSmart) actualDestination = await FileService.ExtractSmartAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
+                    else if (_shellExtractHere) actualDestination = await FileService.ExtractHereAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
+                    else if (_shellExtractFolder) actualDestination = await FileService.ExtractToFolderAsync(_operationArchive, destination, password, operationProgress, token, extractSettings, interaction);
                     else await FileService.ExtractAsync(_operationArchive, destination, password, _extractEntries, operationProgress, token, extractSettings, interaction);
                 }
                 else if (mode == DialogKind.Test) await FileService.TestAsync(_operationArchive, password, operationProgress, token);
@@ -669,12 +670,15 @@ public partial class MainWindow
                         await _operations.RunAsync(inner => Execute(reporter, inner), linked.Token).ConfigureAwait(false);
                     }, mode == DialogKind.AddToArchive ? _operationArchive : destination,
                     mode == DialogKind.AddToArchive ? Path.GetDirectoryName(_operationArchive) : resultFolder,
-                    mode == DialogKind.Create ? destination : _operationArchive, mode == DialogKind.Extract), mode)
+                    mode == DialogKind.Create ? destination : _operationArchive, mode == DialogKind.Extract,
+                    mode == DialogKind.Extract ? () => actualDestination : null), mode)
                 : await RunOperationAsync(token => Execute(progress, token), success, mode,
                     mode is DialogKind.Create or DialogKind.Extract ? destination : null, resultFolder);
+            if (completed && mode == DialogKind.Extract)
+                _resultPath = _resultFolder = actualDestination;
             if (completed && mode == DialogKind.Extract && !_disposed && !OperationOnly && OperationWindows is null)
             {
-                try { Desktop.Open(destination); }
+                try { Desktop.Open(actualDestination); }
                 catch (Exception error)
                 {
                     _dialogError = $"解压已完成，但无法打开输出文件夹：{FriendlyError(error)}";
@@ -817,11 +821,7 @@ public partial class MainWindow
     {
         SetSelectedTheme((Appearance?.Variant ?? _theme) switch { ThemeVariant.System => ThemeVariant.Light, ThemeVariant.Light => ThemeVariant.Dark, _ => ThemeVariant.System });
     }
-    private static string ArchiveBaseName(string path)
-    {
-        var name = Path.GetFileNameWithoutExtension(path);
-        return name.EndsWith(".tar", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
-    }
+    private static string ArchiveBaseName(string path) => ArchivePaths.GetArchiveBaseName(path);
     private static string UniqueDestination(string folder, string name, string extension)
     {
         if (string.IsNullOrWhiteSpace(name)) name = "Archive";
@@ -843,6 +843,7 @@ public partial class MainWindow
         _disposed = true; _operationCancellation?.Cancel(); _lifetime.Cancel();
         _createPopupClosedForOperation?.TrySetResult(false);
         _standaloneOperationClosed?.TrySetResult(new(false, true, null));
+        _standaloneOperationView?.Dispose();
         try { _operations.StopAsync().GetAwaiter().GetResult(); }
         finally { DiscardPendingClipboardFiles(); ClearNestedArchives(); _operationCancellation?.Dispose(); _operations.Dispose(); _lifetime.Dispose(); base.OnDispose(); }
     }

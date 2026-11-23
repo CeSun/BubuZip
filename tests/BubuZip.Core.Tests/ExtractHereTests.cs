@@ -18,7 +18,7 @@ public sealed class ExtractHereTests : IDisposable
     public async Task SmartSingleRootDoesNotAddAWrapper(string entry)
     {
         var archive = WriteZip((entry, "data"));
-        await _service.ExtractSmartAsync(archive, _root);
+        Assert.Equal(_root, await _service.ExtractSmartAsync(archive, _root));
         Assert.Equal("data", await File.ReadAllTextAsync(Path.Combine(_root, entry)));
         Assert.False(Directory.Exists(Path.Combine(_root, "archive")));
         AssertNoStaging();
@@ -42,7 +42,7 @@ public sealed class ExtractHereTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_root, "archive"));
         await File.WriteAllTextAsync(Path.Combine(_root, "archive/a.txt"), "original");
         var interaction = new TestInteraction(_ => new(ArchiveConflictAction.KeepBoth));
-        await _service.ExtractSmartAsync(archive, _root, interaction: interaction);
+        Assert.Equal(Path.Combine(_root, "archive"), await _service.ExtractSmartAsync(archive, _root, interaction: interaction));
         Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(_root, "archive/a.txt")));
         Assert.Equal("a", await File.ReadAllTextAsync(Path.Combine(_root, "archive/a (2).txt")));
         Assert.Equal("b", await File.ReadAllTextAsync(Path.Combine(_root, "archive/folder/b.txt")));
@@ -55,12 +55,13 @@ public sealed class ExtractHereTests : IDisposable
     {
         var archive = WriteZip(("a.txt", "a"), ("b.txt", "b"));
         await File.WriteAllTextAsync(Path.Combine(_root, "archive"), "keep");
-        await _service.ExtractSmartAsync(archive, _root, interaction: new TestInteraction(conflict =>
+        var output = await _service.ExtractSmartAsync(archive, _root, interaction: new TestInteraction(conflict =>
         {
             Assert.False(conflict.CanReplace);
             Assert.True(conflict.IncomingIsDirectory);
             return new(ArchiveConflictAction.KeepBoth);
         }));
+        Assert.Equal(Path.Combine(_root, "archive (2)"), output);
         Assert.Equal("keep", await File.ReadAllTextAsync(Path.Combine(_root, "archive")));
         Assert.Equal("a", await File.ReadAllTextAsync(Path.Combine(_root, "archive (2)/a.txt")));
         AssertNoStaging();
@@ -72,6 +73,44 @@ public sealed class ExtractHereTests : IDisposable
         var archive = WriteZip();
         await _service.ExtractSmartAsync(archive, _root);
         Assert.Equal(new[] { archive }, Directory.EnumerateFileSystemEntries(_root));
+    }
+
+    [Theory]
+    [InlineData("package.tar.gz")]
+    [InlineData("package.TAR.XZ")]
+    [InlineData("package.tgz")]
+    public async Task SmartCompoundArchiveNameUsesOneWrapper(string archiveName)
+    {
+        // The engine detects the content; the wrapper name follows the filename.
+        var archive = Path.Combine(_root, archiveName);
+        File.Move(WriteZip(("a.txt", "a"), ("b.txt", "b")), archive);
+        var output = await _service.ExtractSmartAsync(archive, _root);
+        Assert.Equal(Path.Combine(_root, "package"), output);
+        Assert.Equal("a", await File.ReadAllTextAsync(Path.Combine(output, "a.txt")));
+        AssertNoStaging();
+    }
+
+    [Theory]
+    [InlineData(ArchiveConflictAction.Skip)]
+    [InlineData(ArchiveConflictAction.KeepBoth)]
+    [InlineData(ArchiveConflictAction.Cancel)]
+    public async Task NamedFolderConflictingWithAFileHonorsTheDecision(ArchiveConflictAction action)
+    {
+        var archive = WriteZip(("folder/a.txt", "a"));
+        var destination = Path.Combine(_root, "archive");
+        await File.WriteAllTextAsync(destination, "original");
+        var interaction = new TestInteraction(_ => new(action));
+        if (action == ArchiveConflictAction.Cancel)
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                _service.ExtractToFolderAsync(archive, destination, interaction: interaction));
+        else
+        {
+            var output = await _service.ExtractToFolderAsync(archive, destination, interaction: interaction);
+            Assert.Equal(action == ArchiveConflictAction.Skip ? _root : destination + " (2)", output);
+        }
+        Assert.Equal("original", await File.ReadAllTextAsync(destination));
+        Assert.Equal(action == ArchiveConflictAction.KeepBoth, File.Exists(Path.Combine(destination + " (2)", "folder/a.txt")));
+        AssertNoStaging();
     }
 
     [Fact]
@@ -259,7 +298,7 @@ public sealed class ExtractHereTests : IDisposable
         }
         else await File.WriteAllTextAsync(conflict, "keep file");
         var archive = WriteZip(("would-have-been-new.txt", "new"),
-            (directoryConflict ? "资料/inside.txt" : "same.txt", "must not overwrite"));
+            (directoryConflict ? "资料/original.txt" : "same.txt", "must not overwrite"));
 
         await Assert.ThrowsAsync<IOException>(() => _service.ExtractHereAsync(archive, _root));
 

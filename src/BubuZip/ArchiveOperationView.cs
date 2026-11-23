@@ -117,9 +117,11 @@ public partial class ArchiveOperationView
         return index == 0 ? $"{value:0} {units[index]}" : $"{value:0.00} {units[index]}";
     }
     private string ErrorText => _folderError.Length > 0 ? _folderError : _visibleOutcome?.Error ?? "";
-    private bool CanOpenFolder => _visibleOutcome?.Succeeded == true && !string.IsNullOrWhiteSpace(_operation?.ResultFolder);
-    private string OutputLocation => _visibleOutcome?.Succeeded == true && !string.IsNullOrWhiteSpace(_operation?.ResultPath)
-        ? "输出位置：" + _operation.ResultPath : "";
+    private string? ResultFolder => _operation?.ResolveExtractionOutput?.Invoke() ?? _operation?.ResultFolder;
+    private string? ResultPath => _operation?.ResolveExtractionOutput?.Invoke() ?? _operation?.ResultPath;
+    private bool CanOpenFolder => _visibleOutcome?.Succeeded == true && !string.IsNullOrWhiteSpace(ResultFolder);
+    private string OutputLocation => _visibleOutcome?.Succeeded == true && !string.IsNullOrWhiteSpace(ResultPath)
+        ? "输出位置：" + ResultPath : "";
 
     protected override void OnInitialized()
     {
@@ -233,7 +235,7 @@ public partial class ArchiveOperationView
     private void OpenResultFolder()
     {
         if (!CanOpenFolder) return;
-        try { Desktop.Open(_operation!.ResultFolder!); _folderError = ""; }
+        try { Desktop.Open(ResultFolder!); _folderError = ""; }
         catch (Exception error) { _folderError = "无法打开输出文件夹：" + FriendlyError(error); }
         Invalidate();
     }

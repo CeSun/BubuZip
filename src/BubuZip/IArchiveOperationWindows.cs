@@ -11,7 +11,8 @@ public sealed record ArchiveOperationSpec(
     string? ResultPath = null,
     string? ResultFolder = null,
     string? DisplayPath = null,
-    bool IsExtraction = false);
+    bool IsExtraction = false,
+    Func<string?>? ResolveExtractionOutput = null);
 
 public sealed record ArchiveOperationOutcome(bool Succeeded, bool Cancelled, string? Error);
 

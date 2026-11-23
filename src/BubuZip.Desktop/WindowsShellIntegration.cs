@@ -154,8 +154,8 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
             var archiveFilter = string.Join(" OR ", ArchiveShellFormats.Extensions.Select(extension => $"System.FileExtension:=\"{extension}\""));
             AddMenuVerb(path, "01open", "打开压缩包", "open", archiveFilter);
             AddMenuVerb(path, "02extract", "提取文件…", "extract", archiveFilter);
-            AddMenuVerb(path, "03extract-here", "提取到此处", "extract-here", archiveFilter);
-            AddMenuVerb(path, "03extract-smart", "智能解压", "extract-smart", archiveFilter);
+            AddMenuVerb(path, "03extract-here", "提取到当前位置", "extract-here", archiveFilter);
+            AddMenuVerb(path, "03extract-smart", "提取到当前位置(智能)", "extract-smart", archiveFilter);
             AddMenuVerb(path, "04extract-folder", "提取到同名文件夹", "extract-folder", archiveFilter);
             AddMenuVerb(path, "05test", "测试压缩包", "test", archiveFilter);
         }
