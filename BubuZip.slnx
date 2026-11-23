@@ -8,4 +8,18 @@
     <Project Path="tests/BubuZip.Core.Tests/BubuZip.Core.Tests.csproj" />
     <Project Path="tests/BubuZip.Ui.Tests/BubuZip.Ui.Tests.csproj" />
   </Folder>
+  <Folder Name="/external/EclipseUI/src/">
+    <Project Path="external/EclipseUI/src/EclipseUI.Compiler.Generator/EclipseUI.Compiler.Generator.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Compiler.Metadata/EclipseUI.Compiler.Metadata.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Compiler.Probe/EclipseUI.Compiler.Probe.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Compiler/EclipseUI.Compiler.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Platform.Linux/EclipseUI.Platform.Linux.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Platform.MacOS/EclipseUI.Platform.MacOS.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Platform.Windows/EclipseUI.Platform.Windows.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Rendering.Vello/EclipseUI.Rendering.Vello.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Rendering/EclipseUI.Rendering.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Runtime/EclipseUI.Runtime.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Text.Shaping/EclipseUI.Text.Shaping.csproj" />
+    <Project Path="external/EclipseUI/src/EclipseUI.Themes.Fluent/EclipseUI.Themes.Fluent.csproj" />
+  </Folder>
 </Solution>
