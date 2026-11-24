@@ -8,3 +8,5 @@ TestResults/
 *.user
 *.suo
 .DS_Store
+.workbuddy/
+src/BubuZip.Desktop/Properties/PublishProfiles/
