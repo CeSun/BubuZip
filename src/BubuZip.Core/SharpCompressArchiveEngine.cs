@@ -224,8 +224,9 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
         IReadOnlyList<ArchiveExtractionTarget> targets,
         string? password = null,
         Action<string>? entryCompleted = null,
-        CancellationToken cancellationToken = default) => Task.Run(async () =>
-        {
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, ValueTask>? beforeEntry = null) => Task.Run(async () =>
+    {
             cancellationToken.ThrowIfCancellationRequested();
             ValidateArchiveSource(source);
             ArgumentNullException.ThrowIfNull(targets);
@@ -240,11 +241,12 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
             }
             if (requested.Count == 0) return;
             var detection = await DetectAsync(source, password, cancellationToken).ConfigureAwait(false);
-            if (detection.ReaderOnly) { await ExtractSequentialAsync(source, requested.Values.ToArray(), password, entryCompleted, detection.OuterCompression, cancellationToken).ConfigureAwait(false); return; }
+            if (detection.ReaderOnly) { await ExtractSequentialAsync(source, requested.Values.ToArray(), password, entryCompleted, detection.OuterCompression, cancellationToken, beforeEntry).ConfigureAwait(false); return; }
             if (detection.RawCompression is { } raw)
             {
                 var rawName = SingleEntryName(source);
                 if (requested.Count != 1 || !requested.TryGetValue(rawName, out var target)) throw new FileNotFoundException("Archive entry was not found.");
+                if (beforeEntry is not null) await beforeEntry(rawName, cancellationToken).ConfigureAwait(false);
                 await using (var output = OpenDestination(target, source)) await ExtractRawAsync(source, rawName, output, raw, cancellationToken).ConfigureAwait(false);
                 entryCompleted?.Invoke(rawName);
                 return;
@@ -282,6 +284,7 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
                         var name = NormalizeEntryPath(reader.Entry.Key ?? "");
                         if (!remaining.Remove(name)) continue;
                         var entry = metadata[name];
+                        if (beforeEntry is not null) await beforeEntry(name, cancellationToken).ConfigureAwait(false);
                         await using (var destination = OpenDestination(requested[name], source))
                         await using (var content = await reader.OpenEntryStreamAsync(cancellationToken).ConfigureAwait(false))
                         {
@@ -325,6 +328,7 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
                 {
                     if (!requested.TryGetValue(name, out var target)) continue;
                     cancellationToken.ThrowIfCancellationRequested();
+                    if (beforeEntry is not null) await beforeEntry(name, cancellationToken).ConfigureAwait(false);
                     await using (var destination = OpenDestination(target, source))
                         await entry.WriteToAsync(destination, new ExtractionOptions { CheckCrc = true },
                             cancellationToken: cancellationToken).ConfigureAwait(false);

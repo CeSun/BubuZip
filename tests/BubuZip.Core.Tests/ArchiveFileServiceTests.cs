@@ -56,8 +56,17 @@ public sealed class ArchiveFileServiceTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => extracting
             ? _service.ExtractAsync(archive, destination, progress: progress, cancellationToken: cancellation.Token)
             : _service.CreateAsync([source], destination, ArchiveFormat.Zip, progress: progress, cancellationToken: cancellation.Token));
-        Assert.False(File.Exists(destination));
-        Assert.False(Directory.Exists(destination));
+        // Extraction writes straight to the target: the partially written file stays. Creation still commits atomically.
+        if (extracting)
+        {
+            Assert.True(Directory.Exists(destination));
+            Assert.True(File.Exists(Path.Combine(destination, "large.bin")));
+        }
+        else
+        {
+            Assert.False(File.Exists(destination));
+            Assert.False(Directory.Exists(destination));
+        }
         AssertNoTemporaryOutputs();
     }
 
@@ -240,7 +249,9 @@ public sealed class ArchiveFileServiceTests : IDisposable
             _service.ExtractAsync(archive, output, progress: progress, cancellationToken: cancellation.Token));
 
         Assert.True(cancellation.IsCancellationRequested);
-        Assert.False(Directory.Exists(output));
+        // Direct extraction leaves whatever was already written before cancellation.
+        Assert.True(Directory.Exists(output));
+        Assert.True(File.Exists(Path.Combine(output, "source.txt")));
         AssertNoTemporaryOutputs();
     }
 
@@ -251,13 +262,15 @@ public sealed class ArchiveFileServiceTests : IDisposable
         await File.WriteAllTextAsync(source, "private content");
         var archive = Path.Combine(_root, "encrypted.7z");
         await _service.CreateAsync([source], archive, ArchiveFormat.SevenZip, password: "correct-password");
-        var output = Path.Combine(_root, "wrong-password-output");
+        var wrongOutput = Path.Combine(_root, "wrong-password-output");
 
-        await Assert.ThrowsAnyAsync<Exception>(() => _service.ExtractAsync(archive, output, password: "wrong-password"));
-        Assert.False(Directory.Exists(output));
+        await Assert.ThrowsAnyAsync<Exception>(() => _service.ExtractAsync(archive, wrongOutput, password: "wrong-password"));
+        // The destination is created before decryption; a wrong password leaves partial output behind.
+        Assert.True(Directory.Exists(wrongOutput));
         AssertNoTemporaryOutputs();
         await Assert.ThrowsAnyAsync<Exception>(() => _service.TestAsync(archive, password: "wrong-password"));
         await _service.TestAsync(archive, password: "correct-password");
+        var output = Path.Combine(_root, "correct-password-output");
         await _service.ExtractAsync(archive, output, password: "correct-password");
         Assert.Equal("private content", await File.ReadAllTextAsync(Path.Combine(output, "秘密.txt")));
     }

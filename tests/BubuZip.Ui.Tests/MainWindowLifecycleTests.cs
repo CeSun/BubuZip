@@ -113,7 +113,8 @@ public sealed class MainWindowLifecycleTests
         Assert.True(engine.Entered.Wait(TimeSpan.FromSeconds(5)), "The archive reader did not start.");
         fixture.Click("取消"); fixture.WaitForIdle();
         Assert.Empty(fixture.Desktop.OpenedPaths);
-        Assert.False(Directory.Exists(Path.Combine(fixture.DirectoryPath, "archive")));
+        // Direct extraction keeps the output folder and the file that was opened before cancellation.
+        Assert.True(Directory.Exists(Path.Combine(fixture.DirectoryPath, "archive")));
         Assert.Equal("操作已取消", fixture.Window.StatusMessage);
         Assert.DoesNotContain("操作成功", fixture.Texts());
         Assert.DoesNotContain(fixture.Elements<Button>(), button => button.Label == "打开文件夹" && button.IsEffectivelyVisible);

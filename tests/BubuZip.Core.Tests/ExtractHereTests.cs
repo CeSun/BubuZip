@@ -212,33 +212,35 @@ public sealed class ExtractHereTests : IDisposable
     }
 
     [Fact]
-    public async Task CancellingALaterConflictDoesNotApplyEarlierReplaceChoices()
+    public async Task CancellingALaterConflictKeepsTheEarlierReplacedFile()
     {
         foreach (var name in new[] { "a.txt", "b.txt" }) await File.WriteAllTextAsync(Path.Combine(_root, name), "old");
         var archive = WriteZip(("a.txt", "new"), ("b.txt", "new"));
         var interaction = new TestInteraction(conflict => new(conflict.EntryPath == "a.txt" ? ArchiveConflictAction.Replace : ArchiveConflictAction.Cancel));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.ExtractHereAsync(archive, _root, interaction: interaction));
-        foreach (var name in new[] { "a.txt", "b.txt" }) Assert.Equal("old", await File.ReadAllTextAsync(Path.Combine(_root, name)));
+        Assert.Equal("new", await File.ReadAllTextAsync(Path.Combine(_root, "a.txt")));
+        Assert.Equal("old", await File.ReadAllTextAsync(Path.Combine(_root, "b.txt")));
+        Assert.Equal(2, interaction.Conflicts.Count);
         AssertNoStaging();
     }
 
     [Fact]
-    public async Task ACommitFailureRestoresAlreadyReplacedFilesAndKeepsTheNewConflictingFile()
+    public async Task ConflictPromptsInterleaveWithExtraction()
     {
-        await File.WriteAllTextAsync(Path.Combine(_root, "a.txt"), "original a");
-        await File.WriteAllTextAsync(Path.Combine(_root, "z.txt"), "original z");
-        var archive = WriteZip(("a.txt", "replace a"), ("m.txt", "new m"), ("z.txt", "skip z"));
+        await File.WriteAllTextAsync(Path.Combine(_root, "same.txt"), "original");
+        var archive = WriteZip(("first.txt", "first"), ("same.txt", "incoming"), ("last.txt", "last"));
+        var seen = new List<string>();
         var interaction = new TestInteraction(conflict =>
         {
-            if (conflict.EntryPath == "a.txt") return new(ArchiveConflictAction.Replace);
-            File.WriteAllText(Path.Combine(_root, "m.txt"), "created while waiting");
+            Assert.True(File.Exists(Path.Combine(_root, "first.txt")));
+            Assert.False(File.Exists(Path.Combine(_root, "last.txt")));
+            seen.Add(conflict.EntryPath);
             return new(ArchiveConflictAction.Skip);
         });
-        await Assert.ThrowsAsync<IOException>(() => _service.ExtractHereAsync(archive, _root, interaction: interaction));
-        Assert.Equal("original a", await File.ReadAllTextAsync(Path.Combine(_root, "a.txt")));
-        Assert.Equal("original z", await File.ReadAllTextAsync(Path.Combine(_root, "z.txt")));
-        Assert.Equal("created while waiting", await File.ReadAllTextAsync(Path.Combine(_root, "m.txt")));
-        Assert.Null(interaction.Summary);
+        await _service.ExtractHereAsync(archive, _root, interaction: interaction);
+        Assert.Equal(["same.txt"], seen);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(_root, "same.txt")));
+        Assert.Equal("last", await File.ReadAllTextAsync(Path.Combine(_root, "last.txt")));
         AssertNoStaging();
     }
 
@@ -288,7 +290,7 @@ public sealed class ExtractHereTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AFileOrDirectoryConflictPreventsEveryTopLevelItemFromBeingCommitted(bool directoryConflict)
+    public async Task AFileOrDirectoryConflictKeepsEntriesExtractedBeforeIt(bool directoryConflict)
     {
         var conflict = Path.Combine(_root, directoryConflict ? "资料" : "same.txt");
         if (directoryConflict)
@@ -302,7 +304,7 @@ public sealed class ExtractHereTests : IDisposable
 
         await Assert.ThrowsAsync<IOException>(() => _service.ExtractHereAsync(archive, _root));
 
-        Assert.False(File.Exists(Path.Combine(_root, "would-have-been-new.txt")));
+        Assert.Equal("new", await File.ReadAllTextAsync(Path.Combine(_root, "would-have-been-new.txt")));
         if (directoryConflict)
         {
             Assert.Equal("keep directory", await File.ReadAllTextAsync(Path.Combine(conflict, "original.txt")));
@@ -368,7 +370,7 @@ public sealed class ExtractHereTests : IDisposable
     }
 
     [Fact]
-    public async Task CancellationDuringExtractionRemovesAllStagingAndDoesNotPublishFiles()
+    public async Task CancellationDuringExtractionKeepsAlreadyPublishedFiles()
     {
         var archive = WriteZip(("first.txt", "first"), ("second.txt", new string('x', 128 * 1024)));
         using var cancellation = new CancellationTokenSource();
@@ -381,7 +383,7 @@ public sealed class ExtractHereTests : IDisposable
             progress: progress, cancellationToken: cancellation.Token));
 
         Assert.True(cancellation.IsCancellationRequested);
-        Assert.Equal(new[] { archive }, Directory.EnumerateFileSystemEntries(_root));
+        Assert.True(File.Exists(Path.Combine(_root, "first.txt")));
         AssertNoStaging();
     }
 

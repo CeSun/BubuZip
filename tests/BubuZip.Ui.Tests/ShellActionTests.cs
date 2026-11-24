@@ -694,7 +694,7 @@ public sealed class ShellActionTests
     }
 
     [Fact]
-    public void ExtractHereConflictReportsAnErrorAndDoesNotCommitAnyOtherItems()
+    public void ExtractHereConflictReportsAnErrorAndKeepsItemsExtractedBeforeIt()
     {
         using var fixture = new ShellFixture();
         var archive = fixture.WriteZip("bundle.zip", ("new.txt", "new"), ("keep.txt", "replacement"));
@@ -704,7 +704,7 @@ public sealed class ShellActionTests
         fixture.WaitForIdle();
 
         Assert.Equal("original", File.ReadAllText(Path.Combine(fixture.Root, "keep.txt")));
-        Assert.False(File.Exists(Path.Combine(fixture.Root, "new.txt")));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(fixture.Root, "new.txt")));
         Assert.Contains(fixture.Texts(), text => text.Contains("目标位置已有同名项目", StringComparison.Ordinal));
         Assert.Empty(fixture.Desktop.OpenedPaths);
         Assert.DoesNotContain("操作成功", fixture.Texts());

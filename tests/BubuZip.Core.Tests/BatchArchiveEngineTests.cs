@@ -385,7 +385,8 @@ public sealed class BatchArchiveEngineTests
         public Task ExtractEntryAsync(Stream source, string entryPath, Stream destination, string? password = null, CancellationToken cancellationToken = default)
         { SingleCalls++; throw new InvalidOperationException("FileService must use the batch path."); }
         public Task ExtractEntriesAsync(Stream source, IReadOnlyList<ArchiveExtractionTarget> targets, string? password = null,
-            Action<string>? entryCompleted = null, CancellationToken cancellationToken = default)
-        { BatchCalls++; return engine.ExtractEntriesAsync(source, targets, password, entryCompleted, cancellationToken); }
+            Action<string>? entryCompleted = null, CancellationToken cancellationToken = default,
+            Func<string, CancellationToken, ValueTask>? beforeEntry = null)
+        { BatchCalls++; return engine.ExtractEntriesAsync(source, targets, password, entryCompleted, cancellationToken, beforeEntry); }
     }
 }

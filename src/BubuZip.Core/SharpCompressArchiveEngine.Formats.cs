@@ -61,7 +61,8 @@ public sealed partial class SharpCompressArchiveEngine
     }
 
     private static async Task ExtractSequentialAsync(Stream source, IReadOnlyList<ArchiveExtractionTarget> targets,
-        string? password, Action<string>? completed, CompressionType? outerCompression, CancellationToken token)
+        string? password, Action<string>? completed, CompressionType? outerCompression, CancellationToken token,
+        Func<string, CancellationToken, ValueTask>? beforeEntry = null)
     {
         var start = source.Position;
         if (outerCompression is { } outer)
@@ -92,6 +93,7 @@ public sealed partial class SharpCompressArchiveEngine
         {
             var name = NormalizeEntryPath(reader.Entry.Key ?? "");
             if (!requested.Remove(name, out var target)) continue;
+            if (beforeEntry is not null) await beforeEntry(name, token).ConfigureAwait(false);
             try
             {
                 await using (var output = OpenDestination(target, source))

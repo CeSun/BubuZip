@@ -86,72 +86,17 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
             await using var source = OpenRead(archivePath);
             var allEntries = await ReadPlan(source, password, cancellationToken).ConfigureAwait(false);
             var entries = MapExtractionPaths(SelectEntries(allEntries, entryPaths), settings ?? new());
-            var temporary = TemporarySibling(destination);
             var tracker = new ArchiveProgressTracker(progress, entries.Count,
                 entries.Where(entry => !entry.Info.IsDirectory).Sum(entry => Math.Max(0, entry.Info.Size)), cancellationToken);
             var packedEntries = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
             if (packedEntries.All(entry => entry.Info.CompressedSize is > 0 || entry.Info.Size == 0 && entry.Info.CompressedSize == 0))
                 tracker.Packed(packedEntries.Sum(entry => entry.Info.CompressedSize!.Value));
             tracker.Report();
-            try
-            {
-                Directory.CreateDirectory(temporary);
-                if (!OperatingSystem.IsWindows())
-                    File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                foreach (var entry in entries.Where(entry => entry.Info.IsDirectory))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var target = Path.Combine(temporary, entry.RelativePath);
-                    EnsureNoLinks(Path.GetDirectoryName(target)!);
-                    Directory.CreateDirectory(target);
-                    tracker.Complete(entry.RelativePath);
-                }
-                var files = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
-                Stream OpenTarget(PlannedEntry entry)
-                {
-                    var target = Path.Combine(temporary, entry.RelativePath);
-                    EnsureNoLinks(Path.GetDirectoryName(target)!);
-                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    tracker.Advance(entry.RelativePath, 0);
-                    return new ProgressWriteStream(target, tracker.Checkpoint,
-                        position => tracker.Advance(entry.RelativePath, position));
-                }
-                void Complete(PlannedEntry entry)
-                {
-                    if (entry.Info.LastModified is { } modified)
-                        File.SetLastWriteTimeUtc(Path.Combine(temporary, entry.RelativePath), modified.ToUniversalTime());
-                    tracker.Complete(entry.RelativePath);
-                }
-                if (_engine is IBatchArchiveEngine batch)
-                {
-                    var byKey = files.ToDictionary(entry => EntryKey(entry.Info.EntryPath), StringComparer.Ordinal);
-                    var targets = files.Select(entry => new ArchiveExtractionTarget(entry.Info.EntryPath, () => OpenTarget(entry))).ToArray();
-                    source.Position = 0;
-                    await batch.ExtractEntriesAsync(source, targets, password, name => Complete(byKey[name]),
-                        cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    foreach (var entry in files)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        source.Position = 0;
-                        await using (var output = OpenTarget(entry))
-                            await _engine.ExtractEntryAsync(source, entry.Info.EntryPath, output, password, cancellationToken).ConfigureAwait(false);
-                        Complete(entry);
-                    }
-                }
-                foreach (var entry in entries.Where(entry => entry.Info.IsDirectory && entry.Info.LastModified is not null)
-                             .OrderByDescending(entry => entry.RelativePath.Length))
-                    Directory.SetLastWriteTimeUtc(Path.Combine(temporary, entry.RelativePath), entry.Info.LastModified!.Value.ToUniversalTime());
-                cancellationToken.ThrowIfCancellationRequested();
-                EnsureNoLinks(Path.GetDirectoryName(destination)!);
-                Directory.Move(temporary, destination);
-            }
-            finally
-            {
-                if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
-            }
+            Directory.CreateDirectory(destination);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            await ApplyPlanAsync(source, entries, NewDestinationPlan(entries, destination), password, tracker,
+                cancellationToken).ConfigureAwait(false);
         }, cancellationToken);
 
     public Task TestAsync(string archivePath, string? password = null,
@@ -186,6 +131,106 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
             }
             cancellationToken.ThrowIfCancellationRequested();
         }, cancellationToken);
+
+    /// <summary>A null target marks an entry skipped by a conflict decision.</summary>
+    private sealed record ExtractionPlacement(string? Target, bool Overwrite = false);
+
+    /// <summary>
+    /// Final write instructions resolved from an archive plan against the destination filesystem.
+    /// Entries stream straight to their target paths; partial output is kept on failure, like mainstream extractors.
+    /// </summary>
+    private sealed class ExtractionPlan
+    {
+        public Dictionary<string, ExtractionPlacement> Files { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, (string Target, DateTime? Modified)> Directories { get; } = new(StringComparer.Ordinal);
+        public List<(string Target, DateTime? Modified)> ExtraDirectories { get; } = [];
+    }
+
+    private static ExtractionPlan NewDestinationPlan(IReadOnlyList<PlannedEntry> entries, string destination)
+    {
+        var plan = new ExtractionPlan();
+        foreach (var entry in entries)
+        {
+            var target = Path.Combine(destination, ToNative(entry.RelativePath));
+            if (entry.Info.IsDirectory) plan.Directories[entry.RelativePath] = (target, entry.Info.LastModified);
+            else plan.Files[entry.RelativePath] = new(target);
+        }
+        return plan;
+    }
+
+    private static string ToNative(string path) => path.Replace('/', Path.DirectorySeparatorChar);
+
+    /// <summary>
+    /// Apply a plan by streaming each entry straight to its final path. No staging copy, no rollback:
+    /// output already written before a failure stays, matching mainstream extractors.
+    /// </summary>
+    private async Task ApplyPlanAsync(Stream source, IReadOnlyList<PlannedEntry> entries, ExtractionPlan plan,
+        string? password, ArchiveProgressTracker tracker, CancellationToken cancellationToken,
+        Func<PlannedEntry, CancellationToken, ValueTask>? beforeEntry = null)
+    {
+        foreach (var entry in entries.Where(entry => entry.Info.IsDirectory))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (plan.Directories.TryGetValue(entry.RelativePath, out var directory))
+            {
+                EnsureNoLinks(directory.Target);
+                Directory.CreateDirectory(directory.Target);
+            }
+            tracker.Complete(entry.RelativePath);
+        }
+        foreach (var extra in plan.ExtraDirectories)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureNoLinks(extra.Target);
+            Directory.CreateDirectory(extra.Target);
+            if (extra.Modified is { } modified)
+                Directory.SetLastWriteTimeUtc(extra.Target, modified.ToUniversalTime());
+        }
+
+        var files = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
+        Stream OpenTarget(PlannedEntry entry)
+        {
+            var placement = plan.Files[entry.RelativePath];
+            if (placement.Target is null) return Stream.Null;
+            EnsureNoLinks(placement.Target);
+            EnsureNoLinks(Path.GetDirectoryName(placement.Target)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(placement.Target)!);
+            tracker.Advance(entry.RelativePath, 0);
+            return new ProgressWriteStream(placement.Target, tracker.Checkpoint,
+                position => tracker.Advance(entry.RelativePath, position), placement.Overwrite);
+        }
+        void Complete(PlannedEntry entry) => tracker.Complete(entry.RelativePath);
+        if (_engine is IBatchArchiveEngine batch)
+        {
+            var byKey = files.ToDictionary(entry => EntryKey(entry.Info.EntryPath), StringComparer.Ordinal);
+            var targets = files.Select(entry => new ArchiveExtractionTarget(entry.Info.EntryPath, () => OpenTarget(entry))).ToArray();
+            async ValueTask Before(string name, CancellationToken token)
+            {
+                if (beforeEntry is null) return;
+                if (byKey.TryGetValue(name, out var entry)) await beforeEntry(entry, token).ConfigureAwait(false);
+            }
+            source.Position = 0;
+            await batch.ExtractEntriesAsync(source, targets, password, name => Complete(byKey[name]),
+                cancellationToken, Before).ConfigureAwait(false);
+        }
+        else
+        {
+            foreach (var entry in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (beforeEntry is not null) await beforeEntry(entry, cancellationToken).ConfigureAwait(false);
+                source.Position = 0;
+                await using (var output = OpenTarget(entry))
+                    await _engine.ExtractEntryAsync(source, entry.Info.EntryPath, output, password, cancellationToken).ConfigureAwait(false);
+                Complete(entry);
+            }
+        }
+        foreach (var entry in files.Where(entry => entry.Info.LastModified is not null && plan.Files[entry.RelativePath].Target is not null))
+            File.SetLastWriteTimeUtc(plan.Files[entry.RelativePath].Target!, entry.Info.LastModified!.Value.ToUniversalTime());
+        foreach (var pair in plan.Directories.Where(pair => pair.Value.Modified is not null)
+                     .OrderByDescending(pair => pair.Value.Target.Length))
+            Directory.SetLastWriteTimeUtc(pair.Value.Target, pair.Value.Modified!.Value.ToUniversalTime());
+    }
 
     private async Task<List<PlannedEntry>> ReadPlan(Stream source, string? password, CancellationToken cancellationToken)
     {

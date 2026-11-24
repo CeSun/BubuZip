@@ -1,8 +1,8 @@
 namespace BubuZip.Core;
 
 /// <summary>A seekable output file that reports its current size after each write.</summary>
-internal sealed class ProgressWriteStream(string path, Action checkpoint, Action<long> written)
-    : FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous)
+internal sealed class ProgressWriteStream(string path, Action checkpoint, Action<long> written, bool overwrite = false)
+    : FileStream(path, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous)
 {
     public override void Write(byte[] buffer, int offset, int count)
     {

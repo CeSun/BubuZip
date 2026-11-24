@@ -52,12 +52,18 @@ public sealed record ArchiveExtractionTarget(string EntryPath, Func<Stream> Open
 /// <summary>Optional efficient extraction of several entries while keeping one archive open.</summary>
 public interface IBatchArchiveEngine : IArchiveEngine
 {
+    /// <summary>
+    /// Extracts the requested entries. <paramref name="beforeEntry"/> is awaited immediately before
+    /// each entry's destination is opened, so callers can resolve conflicts or other asynchronous
+    /// decisions at the moment that entry is actually extracted.
+    /// </summary>
     Task ExtractEntriesAsync(
         Stream source,
         IReadOnlyList<ArchiveExtractionTarget> targets,
         string? password = null,
         Action<string>? entryCompleted = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, ValueTask>? beforeEntry = null);
 }
 
 /// <summary>
