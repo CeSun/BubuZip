@@ -48,6 +48,11 @@ if ($CertificateThumbprint) {
     if ($LASTEXITCODE) { throw 'Sparse package signing failed. Publisher must match a trusted signing certificate.' }
 }
 Copy-Item -LiteralPath (Join-Path $build 'Release/BubuZipShell.dll') -Destination $output -Force
+# Sparse packages resolve the manifest logos against the external location, so the
+# generated assets must sit next to the exe or the taskbar button renders blank.
+$assetOutput = Join-Path $output 'Assets'
+New-Item -ItemType Directory -Force -Path $assetOutput | Out-Null
+Copy-Item -Path (Join-Path $layout 'Assets/*.png') -Destination $assetOutput -Force
 Write-Host "Windows 11 shell extension: $output"
 if (!$CertificateThumbprint) {
     Write-Warning 'The MSIX is not signed yet. Sign it with a trusted certificate before registering the Windows 11 menu.'

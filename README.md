@@ -141,7 +141,7 @@ Windows 11 一级右键菜单还需要原生扩展和稀疏身份包。在 Windo
 ./eng/package-windows.ps1 -Architecture x64
 ```
 
-输出包含 `BubuZip.exe`、`BubuZipShell.dll` 和 `BubuZip.ContextMenu.msix`。仅运行 `dotnet publish` 不会构建菜单组件。默认 MSIX 尚未签名，不能注册一级菜单；发布时传入 `-Publisher 'CN=你的签名主体' -CertificateThumbprint '证书指纹'`，使用当前用户证书存储中相匹配的代码签名证书签名，或在后续发布流程中单独签名。目标系统必须信任签名证书。应用会报告注册错误，不会自动开启开发者模式、安装证书或更改安全策略。Windows 10 使用经典菜单，不需要身份包。
+输出包含 `BubuZip.exe`、`BubuZipShell.dll`、`BubuZip.ContextMenu.msix` 和 `Assets` 目录。仅运行 `dotnet publish` 不会构建菜单组件。`Assets` 必须与 `BubuZip.exe` 一起安装：稀疏包的清单图标按外部安装位置解析，缺少该目录时右键菜单启动的窗口在任务栏会显示空白图标。默认 MSIX 尚未签名，不能注册一级菜单；发布时传入 `-Publisher 'CN=你的签名主体' -CertificateThumbprint '证书指纹'`，使用当前用户证书存储中相匹配的代码签名证书签名，或在后续发布流程中单独签名。目标系统必须信任签名证书。应用会报告注册错误，不会自动开启开发者模式、安装证书或更改安全策略。Windows 10 使用经典菜单，不需要身份包。
 
 发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/BubuZip`。Windows ARM64、Linux ARM64 的原生依赖需要在相应设备上单独验证。
 
