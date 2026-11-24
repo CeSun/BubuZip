@@ -30,7 +30,7 @@ output="$project_root/out/macos-nativeaot/$rid/BubuZip.app"
 
 dotnet publish "$project_root/src/BubuZip.Desktop/BubuZip.Desktop.csproj" \
     -c "$configuration" -r "$rid" --self-contained true \
-    -p:BubuZipNativeAot=true -p:TrimmerSingleWarn=false -o "$publish_dir"
+    -p:PublishAot=true -p:TrimmerSingleWarn=false -o "$publish_dir"
 
 # Debug symbols stay in the publish directory, outside the signed application.
 staging="$(mktemp -d "$project_root/out/nativeaot/.bundle-$rid.XXXXXX")"
