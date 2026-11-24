@@ -61,9 +61,20 @@ public partial class MainWindow
                 }
                 return true;
             }
-            _panel = returnPanel;
-            if (result.Cancelled) StatusMessage = "操作已取消";
-            else _dialogError = result.Error ?? "操作未完成，请重试。";
+            if (result.Cancelled)
+            {
+                StatusMessage = "操作已取消";
+                // A cancelled context-menu operation has nothing left to edit:
+                // restoring the form would just pop the window back open.
+                closeWindow = true;
+                ArchiveWindowClose.Request(this);
+                return false;
+            }
+            // A failed operation stays in its progress view, where the user can retry in place.
+            // Confirming it closes the window instead of bouncing back to the extraction form.
+            StatusMessage = result.Error ?? "操作未完成，请重试。";
+            closeWindow = true;
+            ArchiveWindowClose.Request(this);
             return false;
         }
         finally

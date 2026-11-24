@@ -15,7 +15,7 @@ public partial class ArchiveOperationView
     [UiParameter] public Action<ArchiveOperationOutcome> CloseRequested { get; set; } = _ => { };
     [UiParameter] public Action<string> TitleChanged { get; set; } = _ => { };
 
-    private readonly BackgroundOperations _operations = new();
+    private BackgroundOperations _operations = new();
     private readonly object _stateGate = new();
     private ArchiveOperationSpec? _operation;
     private Task? _execution;
@@ -117,6 +117,35 @@ public partial class ArchiveOperationView
         return index == 0 ? $"{value:0} {units[index]}" : $"{value:0.00} {units[index]}";
     }
     private string ErrorText => _folderError.Length > 0 ? _folderError : _visibleOutcome?.Error ?? "";
+    private bool CanRetry => _visibleOutcome is { Succeeded: false, Cancelled: false } && !_cancelRequested && !HasConflict;
+
+    private void Retry()
+    {
+        if (!CanRetry || IsDisposed) return;
+        _operations.Dispose();
+        _operations = new BackgroundOperations();
+        lock (_stateGate)
+        {
+            _outcome = null;
+            _visibleOutcome = null;
+            _reportedProgress = null;
+            _visibleProgress = null;
+            _extractionSummary = null;
+            _visibleSummary = null;
+            _pendingConflict = null;
+            _visibleConflict = null;
+            _cancelRequested = false;
+            _paused = false;
+            _folderError = "";
+            _elapsed.Reset();
+        }
+        _ticker?.Dispose();
+        _ticker = null;
+        _started = false;
+        _completed = false;
+        _resume.Set();
+        Invalidate();
+    }
     private string? ResultFolder => _operation?.ResolveExtractionOutput?.Invoke() ?? _operation?.ResultFolder;
     private string? ResultPath => _operation?.ResolveExtractionOutput?.Invoke() ?? _operation?.ResultPath;
     private bool CanOpenFolder => _visibleOutcome?.Succeeded == true && !string.IsNullOrWhiteSpace(ResultFolder);
@@ -240,8 +269,33 @@ public partial class ArchiveOperationView
         Invalidate();
     }
 
-    private static string FriendlyError(Exception error) => error is SharpCompress.Common.CryptographicException
-        ? "密码不正确，或压缩包的加密数据已损坏。" : error.Message;
+    private static string LockedFileMessage(Exception error)
+    {
+        var first = error.Message.IndexOf('\'');
+        var last = error.Message.LastIndexOf('\'');
+        if (first < 0 || last <= first)
+            return "文件正被其他程序占用，无法覆盖。请关闭占用该文件的程序后重试。";
+        var path = error.Message[(first + 1)..last];
+        return $"文件“{path}”正被其他程序占用，无法覆盖。请关闭后重试。";
+    }
+
+    private static string FriendlyError(Exception error)
+    {
+        if (error is SharpCompress.Common.CryptographicException)
+            return "密码不正确，或压缩包的加密数据已损坏。";
+        if (error is IOException || error is UnauthorizedAccessException)
+        {
+            switch (error.HResult & 0xFFFF)
+            {
+                case 32: return LockedFileMessage(error);
+                case 5: return "没有权限写入目标位置，请检查文件或文件夹权限。";
+                case 112: return "磁盘空间不足，无法完成解压。";
+                case 206:
+                case 1117: return "路径过长，请把输出目录移到更浅的位置后重试。";
+            }
+        }
+        return error.Message;
+    }
 
     protected override void OnDispose()
     {

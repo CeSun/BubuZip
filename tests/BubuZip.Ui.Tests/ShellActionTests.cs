@@ -152,7 +152,7 @@ public sealed class ShellActionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void StandaloneCreationUsesItsOwnWindowAndCancellationRestoresItsForm(bool cancel)
+    public void StandaloneCreationClosesItsWindowAfterSuccessOrCancellation(bool cancel)
     {
         using var fixture = new ShellFixture();
         var source = fixture.WriteFile("standalone.txt", "standalone payload");
@@ -170,8 +170,10 @@ public sealed class ShellActionTests
         Assert.Equal(390, fixture.Window.Height);
         fixture.Click("确认");
         fixture.WaitForIdle();
-        Assert.Equal(!cancel, fixture.Window.IsDisposed);
-        if (cancel) Assert.Contains(fixture.VisibleButtons(), button => button.Label == "确定" && button.IsEffectiveEnabled);
+        // A cancelled context-menu compression must not fall back to the create form;
+        // the standalone window closes just like it does after a success or a failure.
+        Assert.True(fixture.Window.IsDisposed);
+        Assert.Equal(cancel ? "操作已取消" : "压缩包创建完成。", fixture.Window.StatusMessage);
     }
 
     [Theory]
@@ -227,30 +229,49 @@ public sealed class ShellActionTests
     }
 
     [Fact]
-    public void StandaloneFailureReturnsToTheFormAndRetryCreatesAFreshProgressView()
+    public void StandaloneFailureStaysInTheProgressViewAndRetriesInPlace()
     {
         using var fixture = new ShellFixture();
         var source = fixture.WriteFile("retry.txt", "retry payload");
         var presenter = new CapturingOperationWindows();
-        fixture.Engine.NextCreationFailure = new IOException("暂时无法写入，请重试。");
+        fixture.Engine.NextCreationFailure = System.Runtime.InteropServices.Marshal.GetExceptionForHR(unchecked((int)0x80070020));
         fixture.Open(new(ArchiveShellAction.Compress, [source]), operationOnly: true, operationWindows: presenter);
         fixture.WaitForIdle();
         fixture.Click("确定");
         var failedView = fixture.WaitForOperationResult();
-        Assert.Equal("暂时无法写入，请重试。", failedView.Result.Error);
-        fixture.Click("确认");
-        fixture.WaitForIdle();
-        Assert.False(fixture.Window.IsDisposed);
-        Assert.Empty(fixture.Elements<ArchiveOperationView>());
-        Assert.Contains("暂时无法写入，请重试。", fixture.VisibleTexts());
-        fixture.Click("确定");
+        const string friendly = "文件正被其他程序占用，无法覆盖。请关闭占用该文件的程序后重试。";
+        Assert.Equal(friendly, failedView.Result.Error);
+        Assert.Contains(friendly, fixture.VisibleTexts());
+        Assert.Contains(fixture.VisibleButtons(), button => button.Label == "重试");
+        Assert.Contains(fixture.VisibleButtons(), button => button.Label == "确认");
+
+        fixture.Click("重试");
         var retried = fixture.WaitForOperationResult();
-        Assert.NotSame(failedView, retried);
+        Assert.Same(failedView, retried);
         Assert.True(retried.Result.Succeeded);
         Assert.Empty(presenter.Operations);
+
         fixture.Click("确认");
         fixture.WaitForIdle();
         Assert.True(fixture.Window.IsDisposed);
+    }
+
+    [Fact]
+    public void LockedFileFailureNamesTheFileInTheProgressView()
+    {
+        using var fixture = new ShellFixture();
+        var source = fixture.WriteFile("locked.txt", "payload");
+        var target = fixture.WriteFile("occupied.exe", "occupied");
+        var presenter = new CapturingOperationWindows();
+        var message = $"The process cannot access the file '{target}' because it is being used by another process.";
+        fixture.Engine.NextCreationFailure = new IOException(message, unchecked((int)0x80070020));
+        fixture.Open(new(ArchiveShellAction.Compress, [source]), operationOnly: true, operationWindows: presenter);
+        fixture.WaitForIdle();
+        fixture.Click("确定");
+
+        var failed = fixture.WaitForOperationResult();
+        Assert.Contains(target, failed.Result.Error);
+        Assert.Contains("正被其他程序占用", failed.Result.Error);
     }
 
     [Theory]

@@ -62,11 +62,12 @@
         </StackPanel>
     </ScrollViewer>
     <ArchiveSurface Grid.Row="1" Padding="12" IsVisible={!HasConflict} Style="Background: theme(#292D36, #EFEFEF)">
-        <ArchiveSurface ColumnDefinitions="*,*,*" MaxWidth="380" Gap="10" HorizontalAlignment="Right">
+        <ArchiveSurface ColumnDefinitions="*,*,*,*" MaxWidth="440" Gap="10" HorizontalAlignment="Right">
             <Button IsVisible={!_completed && CanBackground} OnClick={MoveToBackground}>后台</Button>
+            <Button Grid.Column="1" IsVisible={CanRetry} OnClick={Retry}>重试</Button>
             <Button Grid.Column="1" IsVisible={!_completed} IsEnabled={!_cancelRequested} OnClick={TogglePause}>{_paused ? "继续" : "暂停"}</Button>
-            <Button Grid.Column="1" IsVisible={CanOpenFolder} OnClick={OpenResultFolder}>打开文件夹</Button>
-            <Button Grid.Column="2" OnClick={CancelOrClose} IsEnabled={_completed || !_cancelRequested}>{_completed ? "确认" : "取消"}</Button>
+            <Button Grid.Column="2" IsVisible={CanOpenFolder} OnClick={OpenResultFolder}>打开文件夹</Button>
+            <Button Grid.Column="3" OnClick={CancelOrClose} IsEnabled={_completed || !_cancelRequested}>{_completed ? "确认" : "取消"}</Button>
         </ArchiveSurface>
     </ArchiveSurface>
     <ArchiveSurface Grid.Row="1" Padding="12" ColumnDefinitions="*,*,*,*" Gap="8" IsVisible={HasConflict} Style="Background: theme(#292D36, #EFEFEF)">
