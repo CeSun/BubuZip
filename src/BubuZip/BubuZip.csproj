@@ -13,5 +13,7 @@
     <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Compiler.Generator/EclipseUI.Compiler.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <AdditionalFiles Include="**/*.ui;**/*.eustyle" />
+    <EmbeddedResource Include="../../assets/icons/BubuZip.rgba.gz" LogicalName="BubuZip.Icons.Application" />
+    <EmbeddedResource Include="../../assets/icons/BubuZip.Archive.rgba.gz" LogicalName="BubuZip.Icons.Archive" />
   </ItemGroup>
 </Project>

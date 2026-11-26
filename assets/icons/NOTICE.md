@@ -1,17 +1,33 @@
-# BubuZip application icon attribution
+# BubuZip icon artwork
 
-Copyright (c) Shomnipotence and M2-Team. All rights reserved.
+The current application and archive icons were generated for BubuZip on
+2026-11-26 using the built-in image generation tool and a user-provided reference.
+They share a folded-document silhouette, a zipper, and a brown bear peeking
+from behind the zipper. The application icon is blue; the archive icon is white.
 
-Artwork by Shomnipotence, distributed by NanaZip under the Creative Commons
-Attribution-NoDerivatives 4.0 International license (CC BY-ND 4.0).
+## Assets
 
-- Project: https://github.com/M2Team/NanaZip
-- Source revision: ddeb10e55f5a76863ce39bbcc3fcc7298cfa3b32
-- Windows icon: Assets/NanaZip.ico, copied unchanged.
-- macOS artwork: Assets/OriginalAssets/NanaZip/Standard/Standard_{16,32,64,128,256,512,1024}.png.
-- License: https://creativecommons.org/licenses/by-nd/4.0/
+- BubuZip.png / .ico / .icns: application icon.
+- BubuZip.Archive.png / .ico / .icns: archive document icon.
+- PNG files are transparent masters; ICO and ICNS files are format conversions.
+- The .rgba.gz files are embedded UI resources, regenerated from the PNG masters
+  with `python eng/prepare-brand-images.py` (requires Pillow).
 
-The local BubuZip.ico is an unchanged copy of the upstream Windows icon.
-BubuZip.icns packages the original PNG resolutions with Apple's iconutil.
-The artwork, colors and image dimensions are unchanged.
-The upstream license is preserved in NanaZip.License.md.
+The bear is inspired by 布布 from 黄小B's 一二和布布. Character rights remain
+with their respective owner; image generation does not establish a character license.
+
+## Design prompts
+
+Preserve the reference canvas, silhouette, folded corner, zipper geometry and
+bear pose. Apply restrained Fluent gradients, bevels and soft contact shadows.
+For the application variant, use saturated azure blue with white zipper teeth.
+For the archive variant, use pearl white with a blue zipper ribbon. Keep the
+brown bear and transparent background in both variants.
+
+## Historical attribution
+
+The previous icons came from M2Team/NanaZip, revision
+ddeb10e55f5a76863ce39bbcc3fcc7298cfa3b32, with artwork by Shomnipotence.
+NanaZip also served as a palette reference during design.
+Its CC BY-ND 4.0 license is retained in NanaZip.License.md for provenance;
+that license does not describe the current generated artwork.

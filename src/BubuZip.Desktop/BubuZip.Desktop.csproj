@@ -15,6 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../../assets/icons/BubuZip.Archive.ico" Link="BubuZip.Archive.ico"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="BubuZip.Ui.Tests" />
     <ProjectReference Include="../BubuZip/BubuZip.csproj" />
     <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.MacOS/EclipseUI.Platform.MacOS.csproj" />
@@ -25,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../../assets/icons/NOTICE.md" Link="licenses/NanaZip/NOTICE.md"
+    <None Include="../../assets/icons/NOTICE.md" Link="licenses/BubuZip/NOTICE.md"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../assets/icons/NanaZip.License.md" Link="licenses/NanaZip/NanaZip.License.md"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

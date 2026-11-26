@@ -19,6 +19,7 @@ FINDER_REQUEST_TYPE = "io.bubuzip.finder-request"
 FINDER_REQUEST_EXTENSION = "bubuzip-request"
 ICON_ASSETS = ROOT / "assets/icons"
 ICON_NAME = "BubuZip.icns"
+ARCHIVE_ICON_NAME = "BubuZip.Archive.icns"
 
 # Imported declarations advertise existing formats; BubuZip never claims to own them.
 # Standard identifiers match CoreServices. Aliases share one identifier and one declaration.
@@ -69,6 +70,7 @@ def archive_metadata():
             "LSHandlerRank": "Alternate",
             "LSItemContentTypes": [identifier],
             "CFBundleTypeExtensions": list(extensions),
+            "CFBundleTypeIconFile": ARCHIVE_ICON_NAME,
         })
         imported.append({
             "UTTypeIdentifier": identifier,
@@ -104,7 +106,8 @@ def configure_metadata(app, version, minimum_system_version):
     resources = app / "Contents/Resources"
     resources.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ICON_ASSETS / ICON_NAME, resources / ICON_NAME)
-    licenses = resources / "app/licenses/NanaZip"
+    shutil.copy2(ICON_ASSETS / ARCHIVE_ICON_NAME, resources / ARCHIVE_ICON_NAME)
+    licenses = resources / "app/licenses/BubuZip"
     licenses.mkdir(parents=True, exist_ok=True)
     for filename in ("NOTICE.md", "NanaZip.License.md"):
         shutil.copy2(ICON_ASSETS / filename, licenses / filename)

@@ -65,12 +65,7 @@ public sealed class ArchiveWelcomeIcon : Element
     public ArchiveWelcomeIcon() { Width = 72; Height = 72; IsHitTestVisible = false; }
     public override void Render(IElementDrawingContext c)
     {
-        c.FillRectangle(new Rect(0, 0, 72, 72), new UiColor(0, 120, 212), 16);
-        c.FillRectangle(new Rect(21, 15, 30, 42), new UiColor(255, 255, 255, 235), 4);
-        c.FillRectangle(new Rect(32, 15, 8, 42), new UiColor(0, 120, 212));
-        for (var i = 0; i < 6; i++)
-            c.FillRectangle(new Rect(34 + i % 2 * 3, 18 + i * 5, 3, 3), new UiColor(255, 255, 255));
-        c.FillRectangle(new Rect(33, 49, 6, 6), new UiColor(255, 255, 255), 1);
+        c.Image(ArchiveBrandImages.Application, new Rect(0, 0, 72, 72));
     }
 }
 
@@ -168,8 +163,7 @@ public sealed class ArchiveGlyph : Element
                 c.FillRectangle(new(x + 2, y + 3, 16, 11), new(40, 174, 213), 1); R(2, 3, 16, 11);
                 L(10, 14, 10, 17); L(6, 17, 14, 17); break;
             case ArchiveSymbol.Archive:
-                c.FillRectangle(new(x + 4, y + 2, 12, 16), new(0, 143, 222), 1);
-                for (var i = 0; i < 6; i++) c.FillRectangle(new(x + 9 + i % 2, y + 3 + i * 2, 2, 1), new(255, 255, 255)); break;
+                c.Image(ArchiveBrandImages.Archive, new Rect(x, y, 20, 20), color.A / 255.0); break;
             default: R(4, 2, 12, 16); L(7, 7, 13, 7); L(7, 10, 13, 10); L(7, 13, 12, 13); break;
         }
     }

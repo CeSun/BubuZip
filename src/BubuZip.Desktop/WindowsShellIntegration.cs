@@ -78,7 +78,8 @@ internal sealed class WindowsShellIntegration : IShellIntegrationService
             _registry.SetString(program, OwnerValue, _executable);
             // Register as a candidate without silently taking over another application's defaults.
             _registry.SetString(program, "AllowSilentDefaultTakeOver", "");
-            _registry.SetString(program + @"\DefaultIcon", "", Icon(_executable));
+            _registry.SetString(program + @"\DefaultIcon", "",
+                Icon(Path.Combine(Path.GetDirectoryName(_executable) ?? "", "BubuZip.Archive.ico")));
             _registry.SetString(program + @"\shell\open", "MultiSelectModel", "Document");
             _registry.SetString(program + @"\shell\open\command", "", OpenCommand(_executable));
             _registry.SetString(Capabilities, "ApplicationName", "BubuZip");
