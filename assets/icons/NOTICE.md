@@ -9,9 +9,14 @@ from behind the zipper. The application icon is blue; the archive icon is white.
 
 - BubuZip.png / .ico / .icns: application icon.
 - BubuZip.Archive.png / .ico / .icns: archive document icon.
-- PNG files are transparent masters; ICO and ICNS files are format conversions.
+- PNG files are tightly cropped transparent masters. ICO and ICNS exports
+  preserve their proportions on square canvases with approximately 2% edge padding.
 - The .rgba.gz files are embedded UI resources, regenerated from the PNG masters
-  with `python eng/prepare-brand-images.py` (requires Pillow).
+  with `python eng/prepare-brand-images.py` (requires Pillow). The same script
+  removes near-invisible edge residue, crops the masters and exports ICO/ICNS.
+- Small archive icons have a thin blue-gray outline: Windows ICO frames up to
+  32 pixels, macOS 16/32-point Retina frames, and embedded file-list images.
+  Larger frames and application icons retain the unoutlined artwork.
 
 The bear is inspired by 布布 from 黄小B's 一二和布布. Character rights remain
 with their respective owner; image generation does not establish a character license.
