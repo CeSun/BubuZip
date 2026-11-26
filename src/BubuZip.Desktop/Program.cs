@@ -55,6 +55,7 @@ var builder = AppBuilder.Configure<ArchiveApplication>()
         }
         else if (OperatingSystem.IsWindows())
         {
+            services.AddSingleton<IFileIconProvider, WindowsFileIconProvider>();
             services.AddSingleton<IDesktopServices, WindowsDesktopServices>();
             services.AddSingleton<IShellIntegrationService, WindowsShellIntegration>();
         }

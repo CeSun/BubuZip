@@ -22,6 +22,7 @@ public sealed class ArchiveApplication : Application
             FileService = Services.GetRequiredService<ArchiveFileService>(),
             EditService = Services.GetRequiredService<ArchiveEditService>(),
             Desktop = Services.GetRequiredService<IDesktopServices>(),
+            FileIcons = Services.GetService<IFileIconProvider>(),
             ShellIntegration = Services.GetService<IShellIntegrationService>(),
             ShellRequestDecoder = OperatingSystem.IsMacOS() ? new MacFinderRequestFile().ReadIfRequest : null,
             OperationOnly = options.CreateArchive || options.ShellRequest?.Action is { } action && action != ArchiveShellAction.Open,

@@ -31,9 +31,12 @@ internal static class PreviewRenderer
             {
                 Engine = engine, FileService = files, EditService = new(engine, files),
                 Desktop = new PreviewServices(), InitialPath = path,
+                FileIcons = OperatingSystem.IsWindows() ? new WindowsFileIconProvider() : null,
                 ShellIntegration = integration,
                 OperationOnly = createArchive, StartCreating = createArchive,
             };
+            if (window is MainWindow archiveBrowser && !createArchive && File.Exists(path))
+                archiveBrowser.RequestOpenArchive(path);
             window.EnsureInitialized();
             using var host = new HeadlessRoot(window) { AvailableSize = new Size(window.Width, window.Height) };
             using var ui = host.InstallSynchronizationContext();
@@ -49,6 +52,12 @@ internal static class PreviewRenderer
                 host.DrainPostedWork();
                 host.UpdateLayout();
                 Thread.Sleep(1);
+            }
+            if (window is MainWindow browser && browser.FileIcons is { } icons)
+            {
+                Task.WhenAll(browser.VisibleItems.Select(item => icons.GetIconAsync(item.Name, item.IsDirectory)))
+                    .Wait(TimeSpan.FromSeconds(10));
+                host.DrainPostedWork();
             }
             window.Content!.Measure(size);
             window.Content.Arrange(new Rect(Point.Zero, size));

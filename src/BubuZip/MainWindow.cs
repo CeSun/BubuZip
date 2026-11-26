@@ -14,6 +14,7 @@ public partial class MainWindow
     [UiParameter] public ArchiveFileService FileService { get; set; } = null!;
     [UiParameter] public ArchiveEditService? EditService { get; set; }
     [UiParameter] public IDesktopServices Desktop { get; set; } = null!;
+    [UiParameter] public IFileIconProvider? FileIcons { get; set; }
     [UiParameter] public string InitialPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     [UiParameter] public bool OperationOnly { get; set; }
     public IArchiveOperationWindows? OperationWindows { get; set; }
@@ -396,7 +397,7 @@ public partial class MainWindow
         var item = (BrowserItem)value!;
         var grid = new ArchiveFileRow { ColumnDefinitions = pane.FileColumnDefinitions, Height = 22, ClipToBounds = true };
         var name = new Grid { ColumnDefinitions = "22,*", ClipToBounds = true };
-        name.Children.Add(new ArchiveGlyph { Symbol = item.IsDirectory ? ArchiveSymbol.Folder : item.IsArchive ? ArchiveSymbol.Archive : ArchiveSymbol.File, VerticalAlignment = VerticalAlignment.Center });
+        name.Children.Add(new ArchiveFileIcon(item, FileIcons) { VerticalAlignment = VerticalAlignment.Center });
         var label = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true };
         label.AddRun(item.Name); Grid.SetColumn(label, 1); name.Children.Add(label); grid.Children.Add(name);
         var values = new[] { "", item.IsDirectory ? "" : item.Size.ToString("N0").Replace(',', ' '), item.ModifiedLabel,
