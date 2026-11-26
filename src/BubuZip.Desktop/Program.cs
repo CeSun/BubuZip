@@ -50,6 +50,7 @@ var builder = AppBuilder.Configure<ArchiveApplication>()
         services.AddSingleton<ArchiveEditService>();
         if (OperatingSystem.IsMacOS())
         {
+            services.AddSingleton<IFileIconProvider, MacFileIconProvider>();
             services.AddSingleton<IDesktopServices, MacDesktopServices>();
             services.AddSingleton<IShellIntegrationService, MacShellIntegration>();
         }

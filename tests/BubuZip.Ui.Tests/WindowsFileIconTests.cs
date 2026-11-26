@@ -8,10 +8,10 @@ public class WindowsFileIconTests
     [Fact]
     public void KeysUseOnlyTypeAndKeepFoldersDistinct()
     {
-        Assert.Equal(".pdf", WindowsFileIconProvider.CacheKey("private/Report.PDF", false));
-        Assert.Equal("", WindowsFileIconProvider.CacheKey("README", false));
-        Assert.Equal(WindowsFileIconProvider.CacheKey("one.zip", true), WindowsFileIconProvider.CacheKey("two.txt", true));
-        Assert.NotEqual(WindowsFileIconProvider.CacheKey("folder", true), WindowsFileIconProvider.CacheKey("folder", false));
+        Assert.Equal(".pdf", FileTypeIconCache.CacheKey("private/Report.PDF", false));
+        Assert.Equal("", FileTypeIconCache.CacheKey("README", false));
+        Assert.Equal(FileTypeIconCache.CacheKey("one.zip", true), FileTypeIconCache.CacheKey("two.txt", true));
+        Assert.NotEqual(FileTypeIconCache.CacheKey("folder", true), FileTypeIconCache.CacheKey("folder", false));
     }
 
     [Fact]

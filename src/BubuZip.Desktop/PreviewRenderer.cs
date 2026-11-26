@@ -31,7 +31,8 @@ internal static class PreviewRenderer
             {
                 Engine = engine, FileService = files, EditService = new(engine, files),
                 Desktop = new PreviewServices(), InitialPath = path,
-                FileIcons = OperatingSystem.IsWindows() ? new WindowsFileIconProvider() : null,
+                FileIcons = OperatingSystem.IsMacOS() ? new MacFileIconProvider()
+                    : OperatingSystem.IsWindows() ? new WindowsFileIconProvider() : null,
                 ShellIntegration = integration,
                 OperationOnly = createArchive, StartCreating = createArchive,
             };

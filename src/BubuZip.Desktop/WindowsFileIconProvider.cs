@@ -6,27 +6,12 @@ namespace BubuZip.Desktop;
 
 internal sealed class WindowsFileIconProvider : IFileIconProvider
 {
-    private readonly Dictionary<string, Task<IRasterImage?>> _cache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly SemaphoreSlim _worker = new(1);
-    internal static string CacheKey(string name, bool directory)
-        => directory ? "<folder>" : Path.GetExtension(name).ToLowerInvariant();
+    private readonly FileTypeIconCache _cache = new(ReadIcon);
 
     public Task<IRasterImage?> GetIconAsync(string name, bool isDirectory)
     {
         if (!OperatingSystem.IsWindows()) return Task.FromResult<IRasterImage?>(null);
-        var key = CacheKey(name, isDirectory);
-        lock (_cache)
-        {
-            if (_cache.TryGetValue(key, out var cached)) return cached;
-            if (_cache.Count >= 256) return Task.FromResult<IRasterImage?>(null);
-            return _cache[key] = Task.Run(async () =>
-            {
-                await _worker.WaitAsync().ConfigureAwait(false);
-                try { return ReadIcon(key, isDirectory); }
-                catch { return null; }
-                finally { _worker.Release(); }
-            });
-        }
+        return _cache.GetIconAsync(name, isDirectory);
     }
 
     private static IRasterImage? ReadIcon(string extension, bool directory)
