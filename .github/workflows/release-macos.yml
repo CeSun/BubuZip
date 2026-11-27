@@ -85,6 +85,9 @@ jobs:
       - name: Install native dependencies
         run: brew install sdl3 harfbuzz
 
+      - name: Verify native library packaging
+        run: python3 eng/test_macos_bundle.py
+
       - name: Determine version
         id: version
         env:
@@ -178,7 +181,8 @@ jobs:
   release:
     name: GitHub release
     needs: build
-    if: needs.build.result == 'success' && github.event.inputs.publish == 'true'
+    # Test 的跳过状态也会沿依赖链影响 Release；只在构建成功且未取消时发布。
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && github.event.inputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

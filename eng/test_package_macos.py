@@ -153,6 +153,7 @@ class OrchestrationTests(unittest.TestCase):
                            library_dir=[str(root / "native libs")], sdl_library=root / "libSDL3.dylib")
         stage = root / ".stage/Archive.app"
         arguments = packaging.base_command(selected, stage)
+        self.assertEqual(arguments[1], packaging.ROOT / "eng/macos_bundle.py")
         self.assertEqual(arguments[arguments.index("--output") + 1], stage)
         self.assertNotIn("--notary-profile", arguments)
         self.assertNotIn("--force", arguments)

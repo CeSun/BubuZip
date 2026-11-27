@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Package BubuZip with archive document declarations and its Finder Sync extension."""
 import ctypes
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,8 +10,10 @@ import subprocess
 import sys
 import tempfile
 
+from macos_bundle import load_upstream
+
 ROOT = Path(__file__).resolve().parent.parent
-UPSTREAM = ROOT / "external/EclipseUI/eng/bundle_macos.py"
+BUNDLE_SCRIPT = ROOT / "eng/macos_bundle.py"
 FINDER_SOURCE = ROOT / "eng/macos-finder-extension"
 FINDER_NAME = "BubuZipFinder.appex"
 FINDER_REQUEST_TYPE = "io.bubuzip.finder-request"
@@ -45,15 +46,6 @@ ARCHIVE_TYPES = (
     ("io.bubuzip.archive.arj", "ARJ archive", ("arj",), "application/x-arj"),
     ("io.bubuzip.archive.ace", "ACE archive", ("ace",), "application/x-ace-compressed"),
 )
-
-
-def load_upstream():
-    if not UPSTREAM.is_file():
-        raise ValueError("EclipseUI submodule is missing. Run: git submodule update --init --recursive")
-    spec = importlib.util.spec_from_file_location("eclipseui_bundle_macos", UPSTREAM)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def run(*arguments):
@@ -168,7 +160,7 @@ def verify_bundle(upstream, app, arch):
 def base_command(options, staged_app):
     # The upstream packager signs the ordinary payload, but cannot notarize or replace the final
     # application until our metadata and nested extension are in the signed result.
-    command = [sys.executable, UPSTREAM, "--project", Path(options.project).expanduser().resolve(),
+    command = [sys.executable, BUNDLE_SCRIPT, "--project", Path(options.project).expanduser().resolve(),
                "--name", options.name, "--executable", options.executable, "--bundle-id", options.bundle_id,
                "--version", options.version, "--output", staged_app, "--configuration", options.configuration,
                "--rid", options.rid, "--minimum-system-version", options.minimum_system_version,
