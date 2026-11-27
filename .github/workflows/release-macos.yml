@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: true
+      skip_tests:
+        description: '忽略测试（直接构建发布）'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,6 +36,7 @@ env:
 jobs:
   test:
     name: Test
+    if: github.event.inputs.skip_tests != 'true'
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -52,6 +58,8 @@ jobs:
   build:
     name: Build (${{ matrix.arch }})
     needs: test
+    # 忽略测试时 Test 直接跳过，构建仍然继续；测试失败则不构建。
+    if: needs.test.result == 'success' || needs.test.result == 'skipped'
     timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -169,7 +177,7 @@ jobs:
   release:
     name: GitHub release
     needs: build
-    if: github.event.inputs.publish == 'true'
+    if: needs.build.result == 'success' && github.event.inputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
