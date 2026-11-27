@@ -43,7 +43,9 @@ struct FinderRequestTransportTests {
             }
         }
         try expect(FinderMenuCommand(tag: 0) == nil && FinderMenuCommand(tag: -1) == nil, "Unknown tags must fail closed.")
-        try expect(FinderMenuCommand(tag: 0xEC009) == nil && FinderMenuCommand(tag: 0xEC301) == nil,
+        // One past the largest known action keeps this probe unknown as actions are added.
+        let unknownAction = 0xEC000 + (FinderArchiveAction.allCases.map(\.rawValue).max() ?? 0) + 1
+        try expect(FinderMenuCommand(tag: unknownAction) == nil && FinderMenuCommand(tag: 0xEC301) == nil,
                    "Unknown action/context tags must fail closed.")
         let open = FinderMenuCommand(action: .open, menuKind: .contextualMenuForItems)
         try expectFailure("Missing selection must not launch anything.") { _ = try open.paths(selected: nil, targeted: folder) }
