@@ -1,0 +1,205 @@
+# macOS 发布工作流：手动触发构建、打包并发布 BubuZip.app。
+#
+# 签名与公证（可选，全部缺省时使用 ad hoc 签名，仅供测试）：
+#   MACOS_CERTIFICATE_P12        Developer ID Application 证书（.p12）的 base64
+#   MACOS_CERTIFICATE_PASSWORD   .p12 导出密码
+#   APPLE_ID                     公证用 Apple ID
+#   APPLE_APP_SPECIFIC_PASSWORD  App 专用密码
+#   APPLE_TEAM_ID                开发者团队 ID
+name: Release macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '打包版本号（缺省取 Directory.Build.props）'
+        required: false
+        type: string
+      publish:
+        description: '创建 GitHub Release'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install native dependencies
+        run: brew install sdl3 harfbuzz
+      - name: Run .NET tests
+        run: dotnet test BubuZip.slnx
+      - name: Run packaging tests
+        run: python3 eng/test_package_macos.py
+      - name: Run Finder extension tests
+        run: eng/macos-finder-extension/test.sh
+
+  build:
+    name: Build (${{ matrix.arch }})
+    needs: test
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            rid: osx-arm64
+            arch: arm64
+          - runner: macos-15-intel
+            rid: osx-x64
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install native dependencies
+        run: brew install sdl3 harfbuzz
+
+      - name: Determine version
+        id: version
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          elif [[ -n "$VERSION_INPUT" ]]; then
+            version="$VERSION_INPUT"
+          else
+            version="$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Directory.Build.props)"
+          fi
+          # 程序集版本与包版本保持一致。
+          sed -i '' "s|<Version>.*</Version>|<Version>$version</Version>|" Directory.Build.props
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Configure code signing and notarization
+        id: signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -z "$MACOS_CERTIFICATE_P12" ]]; then
+            echo "未配置 Developer ID 证书，使用 ad hoc 签名。"
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/bubuzip-signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          printf '%s' "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o 'Developer ID Application: [^"]*' | head -n 1 || true)"
+          if [[ -z "$identity" ]]; then
+            echo "导入的证书中没有 Developer ID Application 身份。" >&2
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          notarize=false
+          if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            xcrun notarytool store-credentials "bubuzip-notary" \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD"
+            notarize=true
+          else
+            echo "公证凭据不完整，跳过公证（应用仍使用 Developer ID 签名）。"
+          fi
+          echo "notarize=$notarize" >> "$GITHUB_OUTPUT"
+
+      - name: Package BubuZip.app
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          NOTARIZE: ${{ steps.signing.outputs.notarize }}
+        run: |
+          args=(--rid "$RID" --version "$VERSION" --force)
+          if [[ "$SIGN_IDENTITY" != "-" ]]; then
+            args+=(--sign-identity "$SIGN_IDENTITY")
+            if [[ "$NOTARIZE" == "true" ]]; then
+              args+=(--notary-profile bubuzip-notary)
+            fi
+          fi
+          ./eng/package-macos.sh "${args[@]}"
+
+      - name: Verify Gatekeeper assessment
+        if: steps.signing.outputs.notarize == 'true'
+        run: spctl --assess --type execute --verbose=2 out/macos/BubuZip.app
+
+      - name: Archive app
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent out/macos/BubuZip.app "dist/BubuZip-$VERSION-macos-${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bubuzip-macos-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: build
+    if: github.event.inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bubuzip-macos-*
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        run: cd dist && sha256sum *.zip > SHA256SUMS.txt
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            # 正文列出下载链接，Release 底部 Assets 区也会自动展示全部附件。
+            body="## 下载"$'\n'
+            for file in dist/*.zip; do
+              name="$(basename "$file")"
+              body+="- [$name](https://github.com/$GH_REPO/releases/download/$tag/$name)"$'\n'
+            done
+            body+=$'\n'"校验和见 \`SHA256SUMS.txt\`。"
+            gh release create "$tag" dist/* --title "BubuZip $tag" \
+              --generate-notes --notes "$body" --target "$GITHUB_SHA"
+          fi
