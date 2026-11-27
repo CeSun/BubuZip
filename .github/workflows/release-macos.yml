@@ -58,8 +58,9 @@ jobs:
   build:
     name: Build (${{ matrix.arch }})
     needs: test
-    # 忽略测试时 Test 直接跳过，构建仍然继续；测试失败则不构建。
-    if: needs.test.result == 'success' || needs.test.result == 'skipped'
+    # Test 被跳过会连带跳过依赖它的作业，必须用 always() 状态函数越过该传播；
+    # 结果检查保证测试失败或取消时仍然不构建。
+    if: ${{ always() && !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
