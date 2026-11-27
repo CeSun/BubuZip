@@ -76,6 +76,11 @@ public sealed partial class ArchiveFileService
             foreach (var root in roots.Where(root => root.IsDirectory))
                 await PlaceDirectoryAsync(root, Path.Combine(destination, root.Name), cancellationToken).ConfigureAwait(false);
 
+        // Destination file symlinks are a pre-check like the directory planning above: reject the
+        // whole extraction before the first write instead of leaving earlier entries behind.
+        foreach (var entry in entries.Where(entry => !entry.Info.IsDirectory))
+            if (FileTarget(entry.RelativePath) is { } target) EnsureNoLinks(target);
+
         await ApplyPlanAsync(source, entries, plan, password, tracker, cancellationToken,
             ResolveFileAsync).ConfigureAwait(false);
         interaction?.ReportExtractionSummary(new(replaced, skipped, renamed));
@@ -152,19 +157,25 @@ public sealed partial class ArchiveFileService
             return target;
         }
 
+        // Natural target for a file entry; null when its parent folder was skipped.
+        string? FileTarget(string relative)
+        {
+            var separator = relative.LastIndexOf('/');
+            var parent = separator < 0 ? "" : relative[..separator];
+            if (IsSkipped(parent)) return null;
+            var parentTarget = plan.Directories.TryGetValue(parent, out var directory) ? directory.Target : destination;
+            return Path.Combine(parentTarget, Path.GetFileName(ToNative(relative)));
+        }
+
         async ValueTask ResolveFileAsync(PlannedEntry entry, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             var relative = entry.RelativePath;
-            var separator = relative.LastIndexOf('/');
-            var parent = separator < 0 ? "" : relative[..separator];
-            if (IsSkipped(parent))
+            if (FileTarget(relative) is not { } target)
             {
                 plan.Files[relative] = new(null);
                 return;
             }
-            var parentTarget = plan.Directories.TryGetValue(parent, out var directory) ? directory.Target : destination;
-            var target = Path.Combine(parentTarget, Path.GetFileName(ToNative(relative)));
             EnsureNoLinks(target);
             var existingDirectory = Directory.Exists(target);
             var existingFile = File.Exists(target);
