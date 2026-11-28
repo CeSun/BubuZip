@@ -163,7 +163,8 @@ def base_command(options, staged_app):
     command = [sys.executable, BUNDLE_SCRIPT, "--project", Path(options.project).expanduser().resolve(),
                "--name", options.name, "--executable", options.executable, "--bundle-id", options.bundle_id,
                "--version", options.version, "--output", staged_app, "--configuration", options.configuration,
-               "--rid", options.rid, "--minimum-system-version", options.minimum_system_version,
+               "--rid", options.rid, "--framework", options.framework,
+               "--minimum-system-version", options.minimum_system_version,
                "--sign-identity", options.sign_identity]
     if options.publish_dir:
         command.extend(["--publish-dir", options.publish_dir.expanduser().resolve()])

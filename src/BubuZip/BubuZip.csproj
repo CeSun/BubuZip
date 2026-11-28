@@ -7,12 +7,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../BubuZip.Core/BubuZip.Core.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Runtime/EclipseUI.Runtime.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering/EclipseUI.Rendering.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Themes.Fluent/EclipseUI.Themes.Fluent.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Compiler.Generator/EclipseUI.Compiler.Generator.csproj"
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Runtime/BubuUI.Runtime.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Rendering/BubuUI.Rendering.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Themes.Fluent/BubuUI.Themes.Fluent.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Compiler.Generator/BubuUI.Compiler.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <AdditionalFiles Include="**/*.ui;**/*.eustyle" />
+    <AdditionalFiles Include="**/*.bui;**/*.bss" />
     <EmbeddedResource Include="../../assets/icons/BubuZip.rgba.gz" LogicalName="BubuZip.Icons.Application" />
     <EmbeddedResource Include="../../assets/icons/BubuZip.Archive.rgba.gz" LogicalName="BubuZip.Icons.Archive" />
   </ItemGroup>

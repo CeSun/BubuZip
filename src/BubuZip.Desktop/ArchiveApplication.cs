@@ -1,5 +1,5 @@
 using BubuZip.Core;
-using EclipseUI;
+using BubuUI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BubuZip.Desktop;

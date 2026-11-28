@@ -1,12 +1,12 @@
 using BubuZip.Core;
 using BubuZip;
 using BubuZip.Desktop;
-using EclipseUI;
-using EclipseUI.Platform.MacOS;
-using EclipseUI.Platform.Windows;
-using EclipseUI.Platform.Linux;
-using EclipseUI.Rendering.Vello;
-using EclipseUI.Text.Shaping;
+using BubuUI;
+using BubuUI.Platform.MacOS;
+using BubuUI.Platform.Windows;
+using BubuUI.Platform.Linux;
+using BubuUI.Rendering.Vello;
+using BubuUI.Text.Shaping;
 using Microsoft.Extensions.DependencyInjection;
 
 DesktopCommandLineOptions options;

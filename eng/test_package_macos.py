@@ -19,7 +19,7 @@ spec.loader.exec_module(packaging)
 def options(root, **overrides):
     values = dict(project=root / "Project with spaces/Archive.csproj", name="BubuZip",
                   executable="BubuZip", bundle_id="io.bubuzip.app", version="0.1.0",
-                  output=root / "BubuZip.app", configuration="Release", rid="osx-arm64",
+                  output=root / "BubuZip.app", configuration="Release", rid="osx-arm64", framework="net11.0",
                   minimum_system_version="13.0", sign_identity="-", publish_dir=root / "publish",
                   library_dir=[], sdl_library=None, notary_profile=None, force=False, verify=None)
     values.update(overrides)
@@ -155,6 +155,7 @@ class OrchestrationTests(unittest.TestCase):
         arguments = packaging.base_command(selected, stage)
         self.assertEqual(arguments[1], packaging.ROOT / "eng/macos_bundle.py")
         self.assertEqual(arguments[arguments.index("--output") + 1], stage)
+        self.assertEqual(arguments[arguments.index("--framework") + 1], selected.framework)
         self.assertNotIn("--notary-profile", arguments)
         self.assertNotIn("--force", arguments)
         self.assertNotIn(selected.output, arguments)

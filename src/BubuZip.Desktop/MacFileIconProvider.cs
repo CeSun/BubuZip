@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
-using EclipseUI;
-using EclipseUI.Rendering;
+using BubuUI;
+using BubuUI.Rendering;
 
 namespace BubuZip.Desktop;
 
@@ -67,7 +67,7 @@ internal sealed class MacFileIconProvider : IFileIconProvider
             CGContextDrawImage(context, rect, image);
             var pixels = new byte[PixelSize * PixelSize * 4];
             Marshal.Copy(CGBitmapContextGetData(context), pixels, 0, pixels.Length);
-            // EclipseUI takes straight-alpha sRGB, while Quartz draws premultiplied RGBA.
+            // BubuUI takes straight-alpha sRGB, while Quartz draws premultiplied RGBA.
             for (var index = 0; index < pixels.Length; index += 4)
             {
                 var alpha = pixels[index + 3];

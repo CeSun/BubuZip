@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
-using EclipseUI;
-using EclipseUI.Rendering;
+using BubuUI;
+using BubuUI.Rendering;
 
 namespace BubuZip.Desktop;
 

@@ -1,4 +1,4 @@
-using EclipseUI.Elements;
+using BubuUI.Elements;
 
 namespace BubuZip;
 

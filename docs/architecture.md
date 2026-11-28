@@ -1,6 +1,6 @@
 # 架构说明
 
-BubuZip 是独立的 .NET 10 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。EclipseUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
+BubuZip 是独立的 .NET 11 应用仓库，支持 Windows、Linux 和 macOS 13 及更新版本。BubuUI 通过 Git submodule 引用，应用源代码与框架源代码分别维护。
 
 解决方案、源码项目和命名空间统一使用 `BubuZip`。桌面可执行文件名为 `BubuZip`，共享 UI 程序集为 `BubuZip.UI`，避免与桌面入口的程序集同名。macOS 包名为 `BubuZip.app`，应用标识为 `io.bubuzip.app`，访达扩展为 `io.bubuzip.app.finder`。
 
@@ -21,14 +21,14 @@ BubuZip/
 │   ├── BubuZip.Core.Tests/  引擎与文件服务测试
 │   └── BubuZip.Ui.Tests/    浏览和主窗口交互测试
 ├── external/
-│   └── EclipseUI/                  Git 子模块
+│   └── BubuUI/                  Git 子模块
 ├── eng/
 │   └── package-macos.sh            应用打包入口
 └── docs/
     └── architecture.md
 ```
 
-`src/BubuZip` 包含 `MainWindow.ui` 与对应交互代码、`FileListBox`、`BrowserService`，以及 `IDesktopServices` 接口。它引用 Core 和子模块中的 Runtime、Rendering、主题及 `.ui` 编译生成器。
+`src/BubuZip` 包含 `MainWindow.bui` 与对应交互代码、`FileListBox`、`BrowserService`，以及 `IDesktopServices` 接口。它引用 Core 和子模块中的 Runtime、Rendering、主题及 `.bui` 编译生成器。
 
 `ArchivePane` 保存当前归档的浏览快照、密码、排序、历史与选择。`MainWindow.NavigateToAsync` 拒绝本地目录；上一级在归档根目录停止，切换归档时清空历史，路径栏为只读，返回首页清空当前归档。后台操作及模态对话框期间禁止切换操作目标。`ArchiveControls` 提供跨平台矢量图标、平面命令按钮、只读路径栏和列分隔线。
 
@@ -42,9 +42,9 @@ BubuZip/
 
 ## 框架依赖
 
-`external/EclipseUI` 的上游地址为 <https://github.com/CeSun/EclipseUI.git>，当前提交固定为 `8883952554a6d56ab20360e61c29679b56c3df47`。
+`external/BubuUI` 的上游地址为 <https://github.com/BubuSoftware/BubuUI.git>，当前提交固定为 `f108f5babc81c93f5dc471db680496f67dbdb47c`。
 
-应用通过子模块内的项目引用使用框架。主仓库的子模块记录决定实际框架版本，构建与旁边的 EclipseUI 检出目录无关。这样不同开发者和构建环境可以还原相同依赖，也不会意外使用框架工作目录中的未提交修改。
+应用通过子模块内的项目引用使用框架。主仓库的子模块记录决定实际框架版本，构建与旁边的 BubuUI 检出目录无关。这样不同开发者和构建环境可以还原相同依赖，也不会意外使用框架工作目录中的未提交修改。
 
 首次检出使用 `git clone --recurse-submodules`。已有检出使用：
 
@@ -54,11 +54,11 @@ git submodule update --init --recursive
 
 升级框架时，先在子模块中取得并切换到目标提交，构建及验证应用，再由应用主仓库记录新的子模块提交。常规初始化与还原遵循主仓库固定版本。
 
-当前原生对话框由应用的桌面服务提供，EclipseUI 子模块保持独立。窗口、布局、输入和主题能力由框架提供，归档操作与文件管理交互由应用维护。
+当前原生对话框由应用的桌面服务提供，BubuUI 子模块保持独立。窗口、布局、输入和主题能力由框架提供，归档操作与文件管理交互由应用维护。
 
-应用使用的 EclipseUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`。Windows 和 macOS 使用软件栅格化并由对应平台的图形表面呈现；Linux 使用 Vulkan 后端。框架支持高斯阴影；应用自建主窗口和独立操作窗口均接入对应平台的原生弹出窗口工厂，下拉框和菜单默认使用独立的原生弹出窗口。
+应用使用的 BubuUI 子模块提供 `VelloSurfaceOptions.UseSoftwareRasterizer`。Windows 和 macOS 使用软件栅格化并由对应平台的图形表面呈现；Linux 使用 Vulkan 后端。框架支持高斯阴影；应用自建主窗口和独立操作窗口均接入对应平台的原生弹出窗口工厂，下拉框和菜单默认使用独立的原生弹出窗口。
 
-“新建压缩”的参数界面使用 `Popup.IsModal` 原生子窗口；确认后先释放该窗口，再打开独立进度窗口。macOS 的原生模态使用 Cocoa 应用级会话，输入和焦点管理由 EclipseUI 负责。
+“新建压缩”的参数界面使用 `Popup.IsModal` 原生子窗口；确认后先释放该窗口，再打开独立进度窗口。macOS 的原生模态使用 Cocoa 应用级会话，输入和焦点管理由 BubuUI 负责。
 
 窗口像素回归使用真实 `MainWindow` 的布局与裁剪，分别覆盖浅色、深色以及 1 倍、2 倍设备缩放。每组检查首次绘制及选择变化前后的八个连续帧，断言背景无大面积透明缺失、重复状态的像素哈希一致；文字替身用于隔离系统字体差异。原生窗口启动检查另行验证 macOS 纹理呈现路径。
 
@@ -76,7 +76,7 @@ ZIP/7z 支持归档内添加、删除和同目录重命名，其他格式与加�
 
 ## 设置与系统集成
 
-`ArchiveSettingsWindow` 在独立原生窗口中提供设置，共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`Application.ShowDialog` 和 EclipseUI 的三平台 `IWindowLifetime` 统一管理设置和进度窗口、窗口登记、宿主及剪贴板恢复；BubuZip 不再自己创建副窗口或覆盖 Windows 生命周期。主窗口关闭不会关闭其他窗口，最后一个窗口关闭后程序退出，`Application.Shutdown` 和系统的显式退出命令关闭全部窗口。macOS 应用只保留 Finder 启动文档的隐藏窗口准备阶段，随后将同一原生窗口交给框架运行和管理。设置从主窗口更新完成后的 UI 队列打开，同一时间只打开一个；`Application.SetTheme` 同步所有仍打开的窗口并更新后续窗口的默认主题，格式勾选在本次运行的多次打开之间保留。关闭时取消异步请求并忽略晚返回结果。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 BubuZip 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。
+`ArchiveSettingsWindow` 在独立原生窗口中提供设置，共享 UI 通过 `IShellIntegrationService` 查询、注册文件关联和文件管理器菜单，不访问注册表或平台 API。`Application.ShowDialog` 和 BubuUI 的三平台 `IWindowLifetime` 统一管理设置和进度窗口、窗口登记、宿主及剪贴板恢复；BubuZip 不再自己创建副窗口或覆盖 Windows 生命周期。主窗口关闭不会关闭其他窗口，最后一个窗口关闭后程序退出，`Application.Shutdown` 和系统的显式退出命令关闭全部窗口。macOS 应用只保留 Finder 启动文档的隐藏窗口准备阶段，随后将同一原生窗口交给框架运行和管理。设置从主窗口更新完成后的 UI 队列打开，同一时间只打开一个；`Application.SetTheme` 同步所有仍打开的窗口并更新后续窗口的默认主题，格式勾选在本次运行的多次打开之间保留。关闭时取消异步请求并忽略晚返回结果。`ShellIntegrationStatus.AssociatedExtensions` 仅包含系统实际认定默认由 BubuZip 打开的格式；菜单状态分别记录安装与启用。设置打开时只查询状态，用户点击按钮后才更改系统配置。操作异步执行并防止重复提交，成功后重新查询；失败显示错误，系统确认未完成时不显示为全部关联或菜单已启用。
 
 `ArchiveShellFormats.Extensions` 是跨平台支持格式目录，设置、系统注册和参数验证共用；macOS 包声明也保持相同范围。仅声明当前读取器支持的格式。`MacShellIntegration` 注册当前 `.app`，按包内文档类型设置默认角色处理程序，再读取系统结果；不写单文件 `com.apple.LaunchServices.OpenWith`，不清除下载隔离属性。对于已有单文件绑定与下载隔离组合引发的系统拦截，应用无法在未收到请求之前处理该提示，仍可通过应用内打开文件。
 
@@ -92,7 +92,7 @@ macOS 的原生 Finder Sync 扩展位于 `eng/macos-finder-extension`，随 `.ap
 
 ## Core 与压缩引擎
 
-`src/BubuZip.Core` 定义 `IArchiveEngine`，由 `SharpCompressArchiveEngine` 实现。该项目不依赖 EclipseUI，压缩操作使用 SharpCompress 和 SharpZipLib 托管库，不调用压缩命令行工具，也不加载原生压缩库。
+`src/BubuZip.Core` 定义 `IArchiveEngine`，由 `SharpCompressArchiveEngine` 实现。该项目不依赖 BubuUI，压缩操作使用 SharpCompress 和 SharpZipLib 托管库，不调用压缩命令行工具，也不加载原生压缩库。
 
 NuGet 版本固定为 `SharpCompress 0.51.0-beta.174`，不使用浮动版本。该包标记的仓库提交为 `b2fade6400cf6b3fe851c1fe9773f19b5b20a586`，对应官方 GitHub 的 `0.51.0-beta2`。NuGet 包版本与 GitHub 标签名称不同，升级时应同时核对包版本、仓库提交和行为测试。
 
@@ -124,7 +124,7 @@ NuGet 版本固定为 `SharpCompress 0.51.0-beta.174`，不使用浮动版本。
 
 ```text
 BubuZip.Desktop → macOS 平台
-BubuZip.Desktop → BubuZip → EclipseUI
+BubuZip.Desktop → BubuZip → BubuUI
 BubuZip → BubuZip.Core → SharpCompress
 MacDesktopServices → IDesktopServices（定义于共享 UI）
 ```

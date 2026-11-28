@@ -1,14 +1,14 @@
 # BubuZip
 
-基于 EclipseUI 的桌面压缩解压应用，支持 Windows、Linux 和 macOS。
+基于 BubuUI 的桌面压缩解压应用，支持 Windows、Linux 和 macOS。
 
 启动页提供“新建压缩”“打开压缩”和“设置”入口。打开压缩包后，可以浏览其中的目录、提取内容、测试归档，以及修改受支持的 ZIP/7z；包内的压缩文件可继续逐层打开，浏览范围限定在归档内。设置中可切换外观、关联压缩文件格式，以及注册或移除系统文件管理器的右键菜单。
 
-压缩引擎固定引用 NuGet `SharpCompress 0.51.0-beta.174` 和 `SharpZipLib 1.4.2`，使用托管库完成压缩解压，无需安装命令行压缩工具或原生压缩库。EclipseUI 通过 Git submodule 单独维护。
+压缩引擎固定引用 NuGet `SharpCompress 0.51.0-beta.174` 和 `SharpZipLib 1.4.2`，使用托管库完成压缩解压，无需安装命令行压缩工具或原生压缩库。BubuUI 通过 Git submodule 单独维护。
 
 应用图标使用 NanaZip 正式版原图，由 Shomnipotence 设计；来源及 CC BY-ND 4.0 许可见 [图标说明](assets/icons/NOTICE.md)。macOS 应用包和 Windows 可执行文件均包含对应格式的图标。
 
-仓库为 [CeSun/BubuZip](https://github.com/CeSun/BubuZip)，构建入口为 `BubuZip.slnx`，生成的应用与可执行文件名称为 `BubuZip`（Windows 为 `BubuZip.exe`）。项目和命名空间统一使用 BubuZip，UI 程序集名为 `BubuZip.UI`。
+仓库为 [BubuSoftware/BubuZip](https://github.com/BubuSoftware/BubuZip)，构建入口为 `BubuZip.slnx`，生成的应用与可执行文件名称为 `BubuZip`（Windows 为 `BubuZip.exe`）。项目和命名空间统一使用 BubuZip，UI 程序集名为 `BubuZip.UI`。
 
 从旧项目名升级时，已有外观设置继续使用。Windows 保留已确认的旧版默认关联，并在重新注册菜单时迁移当前安装拥有的旧菜单；macOS 使用新的 `io.bubuzip.app` 应用身份，需要重新关联文件格式并在系统设置中启用新的 BubuZip 访达扩展。
 
@@ -50,7 +50,7 @@ Windows 和 macOS 使用 Vello Sparse 在 CPU 上绘制画面，再由 Direct3D 
 
 ## 开发环境
 
-- .NET 10 SDK；64 位 Windows、Linux 或 macOS 13 及更新版本。目前原生渲染依赖不提供 32 位构建。
+- .NET 11 SDK；64 位 Windows、Linux 或 macOS 13 及更新版本。目前原生渲染依赖不提供 32 位构建。
 - Windows：Direct3D 12、Windows PowerShell 5.1（用于文件选择对话框）。
 - Linux：SDL3、HarfBuzz、Vulkan 驱动、`zenity` 和 `xdg-open`（xdg-utils），以及可用的 X11 或 Wayland 桌面。请通过发行版的软件仓库安装这些组件；不同发行版的 SDL3 包名和版本可能不同。
 - macOS 开发运行所需的 SDL3、HarfBuzz：
@@ -80,7 +80,9 @@ cd BubuZip
 git submodule update --init --recursive
 ```
 
-EclipseUI 位于 `external/EclipseUI`，来源为 <https://github.com/CeSun/EclipseUI.git>，当前固定提交为 `8883952554a6d56ab20360e61c29679b56c3df47`。主仓库记录具体子模块提交，构建使用该版本；应用不依赖相邻的 `../EclipseUI` 工作目录及其未提交修改。
+BubuUI 位于 `external/BubuUI`，来源为 <https://github.com/BubuSoftware/BubuUI.git>，当前固定提交为 `f108f5babc81c93f5dc471db680496f67dbdb47c`。主仓库记录具体子模块提交，构建使用该版本；应用不依赖相邻的 `../BubuUI` 工作目录及其未提交修改。
+
+更新已有检出后，运行 `git submodule sync --recursive` 和 `git submodule update --init --recursive` 同步子模块地址与版本。界面模板使用 `.bui`，样式使用 `.bss`；代码使用 `BubuUI` 命名空间。仓库通过 `global.json` 选择 .NET 11 SDK，与框架和 CI 保持一致。
 
 ## 构建与运行
 
@@ -245,8 +247,8 @@ GitHub Actions 的 `Release Windows and macOS` 工作流为 macOS 分别发布 A
 | `src/BubuZip.Desktop` | 跨平台桌面入口、系统对话框、文件关联、系统菜单注册与离屏预览 |
 | `tests/BubuZip.Core.Tests` | 流式引擎与文件服务测试 |
 | `tests/BubuZip.Ui.Tests` | 文件浏览和主窗口交互测试 |
-| `external/EclipseUI` | 固定提交的 EclipseUI Git 子模块 |
-| `eng/package-macos.sh` | 复用 EclipseUI 打包器的应用入口 |
+| `external/BubuUI` | 固定提交的 BubuUI Git 子模块 |
+| `eng/package-macos.sh` | 复用 BubuUI 打包器的应用入口 |
 | `eng/macos-finder-extension` | 原生 Finder Sync 扩展及构建配置 |
 | `docs/architecture.md` | 工程边界及后续扩展方式 |
 

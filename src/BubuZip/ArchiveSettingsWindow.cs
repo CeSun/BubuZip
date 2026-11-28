@@ -1,20 +1,20 @@
-using EclipseUI;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Themes.Fluent;
 
 namespace BubuZip;
 
 public partial class ArchiveSettingsWindow
 {
-    [UiParameter] public IShellIntegrationService? ShellIntegration { get; set; }
+    public IShellIntegrationService? ShellIntegration { get; set; }
     public ArchiveAppearance? Appearance { get; set; }
     private ThemeVariant _selectedTheme = ThemeVariant.System;
-    [UiParameter] public ThemeVariant SelectedTheme
+    public ThemeVariant SelectedTheme
     {
         get => Appearance?.Variant ?? _selectedTheme;
         set => _selectedTheme = value;
     }
-    [UiParameter] public Action<ThemeVariant> ThemeChanged { get; set; } = _ => { };
-    [UiParameter] public IReadOnlyList<ArchiveAssociationFormatChoice> AssociationFormats { get; set; } = ArchiveShellFormats.Extensions
+    public Action<ThemeVariant> ThemeChanged { get; set; } = _ => { };
+    public IReadOnlyList<ArchiveAssociationFormatChoice> AssociationFormats { get; set; } = ArchiveShellFormats.Extensions
         .Select(extension => new ArchiveAssociationFormatChoice(extension)).ToArray();
 
     private readonly CancellationTokenSource _lifetime = new();

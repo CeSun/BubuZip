@@ -1,5 +1,5 @@
 using System.IO.Compression;
-using EclipseUI.Rendering;
+using BubuUI.Rendering;
 
 namespace BubuZip;
 

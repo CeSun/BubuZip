@@ -1,6 +1,6 @@
 @namespace BubuZip
-@using EclipseUI
-@using EclipseUI.Elements
+@using BubuUI
+@using BubuUI.Elements
 @using BubuZip.Core
 
 <ArchiveSurface RowDefinitions="*,Auto" Style="Background: theme(#20232B, #FAFAF7)">

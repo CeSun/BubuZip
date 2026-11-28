@@ -1,10 +1,10 @@
 using BubuZip.Core;
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Rendering;
-using EclipseUI.Rendering.Vello;
-using EclipseUI.Text.Shaping;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Rendering;
+using BubuUI.Rendering.Vello;
+using BubuUI.Text.Shaping;
+using BubuUI.Themes.Fluent;
 
 namespace BubuZip.Desktop;
 

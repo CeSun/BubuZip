@@ -1,6 +1,6 @@
 @namespace BubuZip
-@using EclipseUI
-@using EclipseUI.Elements
+@using BubuUI
+@using BubuUI.Elements
 
 <ArchiveSurface Ref={PaneRoot} RowDefinitions="32,*,32" Style="Background: theme(#1B2035, #FFFFFF); FontSize: 12">
     <ArchiveSurface ColumnDefinitions="32,*" Style="Background: theme(#242A3A, #F8FAFD)">

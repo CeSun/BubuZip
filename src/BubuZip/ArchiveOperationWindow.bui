@@ -1,6 +1,6 @@
 @namespace BubuZip
-@using EclipseUI
-@using EclipseUI.Elements
+@using BubuUI
+@using BubuUI.Elements
 
 <Window Title={Spec.Title} Width="680" Height="390" CloseOnEscape="false">
     <ArchiveOperationView Ref={OperationView} Spec={Spec} Desktop={Desktop} BackgroundRequested={MoveToBackground} CanBackground={BackgroundRequested is not null} CloseRequested={CloseOperation} TitleChanged={UpdateOperationTitle} />

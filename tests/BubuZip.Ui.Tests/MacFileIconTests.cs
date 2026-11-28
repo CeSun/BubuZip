@@ -1,5 +1,5 @@
 using BubuZip.Desktop;
-using EclipseUI;
+using BubuUI;
 using Xunit;
 
 namespace BubuZip.Ui.Tests;

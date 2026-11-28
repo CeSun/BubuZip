@@ -1,6 +1,6 @@
 @namespace BubuZip
-@using EclipseUI
-@using EclipseUI.Elements
+@using BubuUI
+@using BubuUI.Elements
 
 <Window Title={_standaloneOperation is not null ? _standaloneOperationTitle : OperationOnly ? "BubuZip · " + DialogTitle : "BubuZip"} Width={_standaloneOperation is not null ? 680 : OperationOnly ? _panel == DialogKind.Create ? 900 : 560 : 1000} Height={_standaloneOperation is not null ? 390 : OperationOnly ? _panel == DialogKind.Create ? 740 : _panel == DialogKind.Extract ? 460 : 320 : 640}>
     <ArchiveSurface Ref={RootGrid} Style="Background: theme(#1C2233, #F0F4F9)">

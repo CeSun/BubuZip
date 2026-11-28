@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using BubuZip.Core;
-using EclipseUI;
-using EclipseUI.Elements;
+using BubuUI;
+using BubuUI.Elements;
 using Path = System.IO.Path;
 
 namespace BubuZip;

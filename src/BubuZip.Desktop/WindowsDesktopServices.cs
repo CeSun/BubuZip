@@ -16,43 +16,43 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
         [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
         Add-Type -AssemblyName System.Windows.Forms
         $owner = $null
-        if ($env:ECLIPSE_DIALOG_OWNER -and $env:ECLIPSE_DIALOG_OWNER -ne '0') {
+        if ($env:BUBUZIP_DIALOG_OWNER -and $env:BUBUZIP_DIALOG_OWNER -ne '0') {
             Add-Type -ReferencedAssemblies System.Windows.Forms -TypeDefinition @'
             using System;
             using System.Windows.Forms;
-            public sealed class EclipseDialogOwner : IWin32Window {
-                public EclipseDialogOwner(long handle) { Handle = new IntPtr(handle); }
+            public sealed class BubuZipDialogOwner : IWin32Window {
+                public BubuZipDialogOwner(long handle) { Handle = new IntPtr(handle); }
                 public IntPtr Handle { get; private set; }
             }
         '@
-            $owner = New-Object EclipseDialogOwner -ArgumentList ([Int64]$env:ECLIPSE_DIALOG_OWNER)
+            $owner = New-Object BubuZipDialogOwner -ArgumentList ([Int64]$env:BUBUZIP_DIALOG_OWNER)
         }
         function Show-Picker($dialog) {
             if ($null -ne $owner) { return $dialog.ShowDialog($owner) }
             return $dialog.ShowDialog()
         }
-        $mode = $env:ECLIPSE_DIALOG_MODE
+        $mode = $env:BUBUZIP_DIALOG_MODE
         if ($mode -eq 'folder') {
             $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
             $dialog.Description = '选择文件夹'
             $dialog.ShowNewFolderButton = $true
-            if ($env:ECLIPSE_DIALOG_DIRECTORY) { $dialog.SelectedPath = $env:ECLIPSE_DIALOG_DIRECTORY }
+            if ($env:BUBUZIP_DIALOG_DIRECTORY) { $dialog.SelectedPath = $env:BUBUZIP_DIALOG_DIRECTORY }
             if ((Show-Picker $dialog) -ne 'OK') { exit 1 }
             $paths = @($dialog.SelectedPath)
         } elseif ($mode -eq 'save') {
             $dialog = New-Object System.Windows.Forms.SaveFileDialog
             $dialog.Title = '保存压缩包'
-            $dialog.FileName = $env:ECLIPSE_DIALOG_NAME
+            $dialog.FileName = $env:BUBUZIP_DIALOG_NAME
             $dialog.OverwritePrompt = $false
             $dialog.AddExtension = $false
-            if ($env:ECLIPSE_DIALOG_DIRECTORY) { $dialog.InitialDirectory = $env:ECLIPSE_DIALOG_DIRECTORY }
+            if ($env:BUBUZIP_DIALOG_DIRECTORY) { $dialog.InitialDirectory = $env:BUBUZIP_DIALOG_DIRECTORY }
             if ((Show-Picker $dialog) -ne 'OK') { exit 1 }
             $paths = @($dialog.FileName)
         } else {
             $dialog = New-Object System.Windows.Forms.OpenFileDialog
             $dialog.Title = if ($mode -eq 'files') { '选择要压缩的文件' } else { '打开压缩包' }
             $dialog.Multiselect = $mode -eq 'files'
-            if ($env:ECLIPSE_DIALOG_DIRECTORY) { $dialog.InitialDirectory = $env:ECLIPSE_DIALOG_DIRECTORY }
+            if ($env:BUBUZIP_DIALOG_DIRECTORY) { $dialog.InitialDirectory = $env:BUBUZIP_DIALOG_DIRECTORY }
             if ($mode -eq 'archive') {
                 $dialog.Filter = '压缩文件|*.zip;*.zipx;*.7z;*.rar;*.tar;*.gz;*.gzip;*.tgz;*.bz2;*.bzip2;*.tbz;*.tbz2;*.xz;*.txz;*.lz;*.lzip;*.tlz;*.zst;*.zstd;*.tzst;*.z;*.taz;*.arc;*.arj;*.ace|所有文件|*.*'
             }
@@ -75,10 +75,10 @@ public sealed class WindowsDesktopServices : IDesktopServices, IAsyncDesktopDial
         var script = Convert.ToBase64String(Encoding.Unicode.GetBytes(DialogScript));
         var environment = new Dictionary<string, string>
         {
-            ["ECLIPSE_DIALOG_MODE"] = mode,
-            ["ECLIPSE_DIALOG_DIRECTORY"] = directory ?? "",
-            ["ECLIPSE_DIALOG_NAME"] = name ?? "",
-            ["ECLIPSE_DIALOG_OWNER"] = Process.GetCurrentProcess().MainWindowHandle.ToInt64().ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["BUBUZIP_DIALOG_MODE"] = mode,
+            ["BUBUZIP_DIALOG_DIRECTORY"] = directory ?? "",
+            ["BUBUZIP_DIALOG_NAME"] = name ?? "",
+            ["BUBUZIP_DIALOG_OWNER"] = Process.GetCurrentProcess().MainWindowHandle.ToInt64().ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         var executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
         var result = DesktopProcess.Run(executable, ["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand", script], environment);

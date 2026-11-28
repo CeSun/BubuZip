@@ -1,5 +1,5 @@
-using EclipseUI;
-using EclipseUI.Elements;
+using BubuUI;
+using BubuUI.Elements;
 
 namespace BubuZip;
 
@@ -24,8 +24,8 @@ public partial class ArchivePane
         Guides.InvalidateRender();
         Invalidate();
     }
-    [UiParameter] public Action UpRequested { get; set; } = () => { };
-    [UiParameter] public Action<string> SortRequested { get; set; } = _ => { };
+    public Action UpRequested { get; set; } = () => { };
+    public Action<string> SortRequested { get; set; } = _ => { };
     public BrowserSnapshot? Snapshot { get; set; }
     public string? Password { get; set; }
     public bool HasParentArchive { get; set; }

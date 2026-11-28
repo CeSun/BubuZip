@@ -1,4 +1,4 @@
-using EclipseUI;
+using BubuUI;
 
 namespace BubuZip;
 

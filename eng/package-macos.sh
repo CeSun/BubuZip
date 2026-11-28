@@ -2,10 +2,10 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-eclipse_root="$project_root/external/EclipseUI"
+bubuui_root="$project_root/external/BubuUI"
 
-if [[ ! -f "$eclipse_root/eng/bundle_macos.py" ]]; then
-    echo "EclipseUI submodule is missing. Run: git submodule update --init --recursive" >&2
+if [[ ! -f "$bubuui_root/eng/bundle_macos.py" ]]; then
+    echo "BubuUI submodule is missing. Run: git submodule update --init --recursive" >&2
     exit 1
 fi
 

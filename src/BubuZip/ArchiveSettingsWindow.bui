@@ -1,6 +1,6 @@
 @namespace BubuZip
-@using EclipseUI
-@using EclipseUI.Elements
+@using BubuUI
+@using BubuUI.Elements
 
 <Window Title="BubuZip 设置" Width="720" Height="640" CloseOnEscape="true">
     <ArchiveSurface RowDefinitions="*,Auto,Auto" Style="Background: theme(#1C2233, #F0F4F9)">

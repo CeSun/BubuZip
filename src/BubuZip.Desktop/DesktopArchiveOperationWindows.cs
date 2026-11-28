@@ -1,4 +1,4 @@
-using EclipseUI;
+using BubuUI;
 using System.Runtime.InteropServices;
 
 namespace BubuZip.Desktop;

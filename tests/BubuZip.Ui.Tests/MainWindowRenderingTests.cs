@@ -1,9 +1,9 @@
 using BubuZip.Core;
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Rendering;
-using EclipseUI.Rendering.Vello;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Rendering;
+using BubuUI.Rendering.Vello;
+using BubuUI.Themes.Fluent;
 using Xunit;
 using Path = System.IO.Path;
 

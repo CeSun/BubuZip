@@ -1,11 +1,11 @@
-using EclipseUI;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Themes.Fluent;
 
 namespace BubuZip;
 
 public partial class MainWindow
 {
-    [UiParameter] public IShellIntegrationService? ShellIntegration { get; set; }
+    public IShellIntegrationService? ShellIntegration { get; set; }
     public IArchiveSettingsWindows? SettingsWindows { get; set; }
     public ArchiveAppearance? Appearance { get; set; }
     private readonly ArchiveAssociationFormatChoice[] _associationFormats = ArchiveShellFormats.Extensions

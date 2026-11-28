@@ -1,19 +1,19 @@
 using BubuZip.Core;
-using EclipseUI;
+using BubuUI;
 using System.Diagnostics;
-using EclipseUI.Elements;
+using BubuUI.Elements;
 
 namespace BubuZip;
 
 public partial class ArchiveOperationView
 {
-    [UiParameter] public ArchiveOperationSpec Spec { get; set; } = null!;
-    [UiParameter] public IDesktopServices Desktop { get; set; } = null!;
-    [UiParameter] public Action BackgroundRequested { get; set; } = () => { };
-    [UiParameter] public bool CanBackground { get; set; }
+    public ArchiveOperationSpec Spec { get; set; } = null!;
+    public IDesktopServices Desktop { get; set; } = null!;
+    public Action BackgroundRequested { get; set; } = () => { };
+    public bool CanBackground { get; set; }
 
-    [UiParameter] public Action<ArchiveOperationOutcome> CloseRequested { get; set; } = _ => { };
-    [UiParameter] public Action<string> TitleChanged { get; set; } = _ => { };
+    public Action<ArchiveOperationOutcome> CloseRequested { get; set; } = _ => { };
+    public Action<string> TitleChanged { get; set; } = _ => { };
 
     private BackgroundOperations _operations = new();
     private readonly object _stateGate = new();

@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Themes.Fluent;
 using Xunit;
 
 // A native close must join the worker while its UI synchronization context is not being pumped.

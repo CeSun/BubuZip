@@ -1,7 +1,7 @@
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Rendering;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Rendering;
+using BubuUI.Themes.Fluent;
 using Xunit;
 using Path = System.IO.Path;
 

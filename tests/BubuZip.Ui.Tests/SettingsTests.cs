@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Themes.Fluent;
 using Xunit;
 
 namespace BubuZip.Ui.Tests;
@@ -342,7 +342,7 @@ public sealed class SettingsTests
         public Button Button(string label) => Assert.Single(Elements<Button>(), button => button is not MenuItem && button.Label == label);
         public void Click(string label)
         {
-            Button(label).RaiseEvent(new RoutedEventArgs(EclipseUI.Elements.Button.ClickEvent));
+            Button(label).RaiseEvent(new RoutedEventArgs(BubuUI.Elements.Button.ClickEvent));
             Host.UpdateLayout();
         }
 

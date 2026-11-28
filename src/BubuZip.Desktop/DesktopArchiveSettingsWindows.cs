@@ -1,5 +1,5 @@
-using EclipseUI;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Themes.Fluent;
 
 namespace BubuZip.Desktop;
 

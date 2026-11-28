@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using BubuZip.Core;
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Themes.Fluent;
 using Xunit;
 using Path = System.IO.Path;
 

@@ -19,11 +19,11 @@
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="BubuZip.Ui.Tests" />
     <ProjectReference Include="../BubuZip/BubuZip.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.MacOS/EclipseUI.Platform.MacOS.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.Windows/EclipseUI.Platform.Windows.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Platform.Linux/EclipseUI.Platform.Linux.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering.Vello/EclipseUI.Rendering.Vello.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Text.Shaping/EclipseUI.Text.Shaping.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Platform.MacOS/BubuUI.Platform.MacOS.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Platform.Windows/BubuUI.Platform.Windows.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Platform.Linux/BubuUI.Platform.Linux.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Rendering.Vello/BubuUI.Rendering.Vello.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Text.Shaping/BubuUI.Text.Shaping.csproj" />
   </ItemGroup>
 
   <ItemGroup>

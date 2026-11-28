@@ -1,6 +1,6 @@
 @namespace BubuZip
-@using EclipseUI
-@using EclipseUI.Elements
+@using BubuUI
+@using BubuUI.Elements
 
 <StackPanel Gap="10">
     <TextBlock FontSize="13" TextWrapping="Wrap">{Sources.Count == 0 ? "请选择要添加的文件或文件夹" : $"已选择 {Sources.Count} 个文件或文件夹"}</TextBlock>

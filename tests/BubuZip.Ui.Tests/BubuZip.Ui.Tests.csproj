@@ -10,6 +10,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
     <ProjectReference Include="../../src/BubuZip/BubuZip.csproj" />
     <ProjectReference Include="../../src/BubuZip.Desktop/BubuZip.Desktop.csproj" />
-    <ProjectReference Include="../../external/EclipseUI/src/EclipseUI.Rendering.Vello/EclipseUI.Rendering.Vello.csproj" />
+    <ProjectReference Include="../../external/BubuUI/src/BubuUI.Rendering.Vello/BubuUI.Rendering.Vello.csproj" />
   </ItemGroup>
 </Project>

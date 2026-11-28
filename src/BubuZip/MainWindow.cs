@@ -1,25 +1,25 @@
 using System.Diagnostics;
 using BubuZip.Core;
-using EclipseUI;
-using EclipseUI.Elements;
-using EclipseUI.Themes.Fluent;
+using BubuUI;
+using BubuUI.Elements;
+using BubuUI.Themes.Fluent;
 using Path = System.IO.Path;
 
 namespace BubuZip;
 
 public partial class MainWindow
 {
-    [UiParameter] public Action<IHostTheme> ApplyTheme { get; set; } = _ => { };
-    [UiParameter] public IArchiveEngine Engine { get; set; } = null!;
-    [UiParameter] public ArchiveFileService FileService { get; set; } = null!;
-    [UiParameter] public ArchiveEditService? EditService { get; set; }
-    [UiParameter] public IDesktopServices Desktop { get; set; } = null!;
-    [UiParameter] public IFileIconProvider? FileIcons { get; set; }
-    [UiParameter] public string InitialPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    [UiParameter] public bool OperationOnly { get; set; }
+    public Action<IHostTheme> ApplyTheme { get; set; } = _ => { };
+    public IArchiveEngine Engine { get; set; } = null!;
+    public ArchiveFileService FileService { get; set; } = null!;
+    public ArchiveEditService? EditService { get; set; }
+    public IDesktopServices Desktop { get; set; } = null!;
+    public IFileIconProvider? FileIcons { get; set; }
+    public string InitialPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    public bool OperationOnly { get; set; }
     public IArchiveOperationWindows? OperationWindows { get; set; }
     public IArchiveWindows? ArchiveWindows { get; set; }
-    [UiParameter] public bool StartCreating { get; set; }
+    public bool StartCreating { get; set; }
 
     private Grid RootGrid = null!;
     private ArchiveSurface DialogOverlay = null!;
@@ -793,7 +793,7 @@ public partial class MainWindow
         var rows = SelectedRows; if (rows.Length == 0) return;
         ShowMessageDialog("属性", string.Join("\n\n", rows.Take(8).Select(row => $"{row.Name}\n类型：{row.TypeLabel}\n大小：{row.SizeLabel}\n修改时间：{row.ModifiedLabel}\n位置：{row.Path}")));
     }
-    private void ShowAbout() => ShowMessageDialog("关于 BubuZip", "基于 EclipseUI 的桌面压缩解压工具。\n\n操作：双击或 Enter 打开，Ctrl/⌘+O 打开压缩包，Ctrl/⌘+A 全选，Ctrl/⌘+R 刷新，F2 重命名。\n\n支持 ZIP / 7z 创建、修改，以及归档浏览、提取和测试。");
+    private void ShowAbout() => ShowMessageDialog("关于 BubuZip", "基于 BubuUI 的桌面压缩解压工具。\n\n操作：双击或 Enter 打开，Ctrl/⌘+O 打开压缩包，Ctrl/⌘+A 全选，Ctrl/⌘+R 刷新，F2 重命名。\n\n支持 ZIP / 7z 创建、修改，以及归档浏览、提取和测试。");
     private void ShowMessageDialog(string title, string message)
     {
         _messageTitle = title; _messageBody = message; _dialogError = "";

@@ -1,10 +1,10 @@
 using System.Runtime.Versioning;
-using EclipseUI;
-using EclipseUI.Platform.MacOS;
+using BubuUI;
+using BubuUI.Platform.MacOS;
 
 namespace BubuZip.Desktop;
 
-/// <summary>Receives the initial Finder document before handing the prepared window to EclipseUI.</summary>
+/// <summary>Receives the initial Finder document before handing the prepared window to BubuUI.</summary>
 [SupportedOSPlatform("macos")]
 internal sealed class MacArchiveLifetime(MacOpenDocuments documents) : IApplicationLifetime
 {
@@ -17,7 +17,7 @@ internal sealed class MacArchiveLifetime(MacOpenDocuments documents) : IApplicat
         try
         {
             // Keep the Cocoa window hidden until the launch document selects browser
-            // or operation-only presentation. EclipseUI owns its host and window loop.
+            // or operation-only presentation. BubuUI owns its host and window loop.
             native = new MacOSWindow("BubuZip", 960, 640);
             while (!documents.HasDocuments && (!documents.IsLaunchCompleted || !documents.IsDefaultLaunch))
             {
