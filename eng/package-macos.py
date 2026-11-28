@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Package NativeAOT BubuZip with archive declarations and its Finder Sync extension."""
+import argparse
 import ctypes
 import json
 import os
@@ -243,9 +244,11 @@ def replace_bundle(staged_app, output, force):
 
 
 def package(upstream, options):
+    if options.rid != "osx-arm64":
+        raise ValueError("BubuZip macOS packages support only osx-arm64 (Apple Silicon)")
     if sys.platform != "darwin":
         raise ValueError("macOS packaging requires macOS with Xcode Command Line Tools")
-    arch = "arm64" if options.rid == "osx-arm64" else "x86_64"
+    arch = "arm64"
     if options.verify:
         print(json.dumps(verify_bundle(upstream, options.verify.expanduser().resolve(), arch), indent=2))
         return
@@ -283,7 +286,8 @@ def package(upstream, options):
 
 def main(arguments=None):
     upstream = load_upstream()
-    parser = upstream.parser()
+    parser = argparse.ArgumentParser(parents=[upstream.parser()], add_help=False, conflict_handler="resolve")
+    parser.add_argument("--rid", choices=("osx-arm64",), default="osx-arm64")
     parser.description = __doc__
     parser.set_defaults(project=str(ROOT / "src/BubuZip.Desktop/BubuZip.Desktop.csproj"),
                         name="BubuZip", executable="BubuZip", bundle_id="io.bubuzip.app",

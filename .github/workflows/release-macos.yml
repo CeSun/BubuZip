@@ -98,9 +98,6 @@ jobs:
           - runner: macos-15
             rid: osx-arm64
             arch: arm64
-          - runner: macos-15-intel
-            rid: osx-x64
-            arch: x64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -246,7 +243,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        arch: [x64]
     defaults:
       run:
         shell: pwsh
@@ -298,7 +295,6 @@ jobs:
           ./eng/package-windows.ps1 -Architecture $env:ARCH `
             -Publisher $env:CERTIFICATE_SUBJECT -CertificateThumbprint $env:CERTIFICATE_THUMBPRINT
       - name: Smoke test NativeAOT executable
-        if: matrix.arch == 'x64'
         run: |
           $exe = Join-Path $PWD 'out/windows-x64/BubuZip.exe'
           $preview = Join-Path $env:RUNNER_TEMP 'bubuzip-nativeaot.png'
@@ -373,8 +369,8 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          sha256sum "BubuZip-$VERSION-macos-arm64.dmg" "BubuZip-$VERSION-macos-x64.dmg" \
-            "BubuZip-$VERSION-windows-x64.zip" "BubuZip-$VERSION-windows-arm64.zip" > SHA256SUMS.txt
+          sha256sum "BubuZip-$VERSION-macos-arm64.dmg" \
+            "BubuZip-$VERSION-windows-x64.zip" > SHA256SUMS.txt
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -385,7 +381,15 @@ jobs:
           notes="$RUNNER_TEMP/release-notes.md"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/*.dmg dist/*.zip dist/SHA256SUMS.txt --clobber
-            # 同版本重新发布时更新旧链接并补齐 Windows 下载，保留已有发布说明。
+            # 同版本更新只清理已停用架构的附件，不改动历史版本。
+            gh release view "$tag" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/release-assets.txt"
+            while IFS= read -r asset; do
+              case "$asset" in
+                "BubuZip-$VERSION-macos-x64.dmg"|"BubuZip-$VERSION-macos-x64.zip"|"BubuZip-$VERSION-windows-arm64.zip")
+                  gh release delete-asset "$tag" "$asset" --yes ;;
+              esac
+            done < "$RUNNER_TEMP/release-assets.txt"
+            # 更新下载链接，保留其余发布说明。
             gh release view "$tag" --json body --jq '.body' > "$notes"
             python3 - "$notes" <<'PY'
           import os
@@ -393,17 +397,21 @@ jobs:
           import sys
           path = Path(sys.argv[1])
           body = path.read_text(encoding="utf-8")
-          for arch in ("arm64", "x64"):
-              name = f"BubuZip-{os.environ['VERSION']}-macos-{arch}"
-              body = body.replace(name + ".zip", name + ".dmg")
-          windows_notes = []
-          for arch in ("x64", "arm64"):
-              name = f"BubuZip-{os.environ['VERSION']}-windows-{arch}.zip"
+          version = os.environ["VERSION"]
+          retired = (f"BubuZip-{version}-macos-x64.dmg", f"BubuZip-{version}-macos-x64.zip",
+                     f"BubuZip-{version}-windows-arm64.zip")
+          body = "\n".join(line for line in body.splitlines() if not any(name in line for name in retired))
+          body = body.replace(f"BubuZip-{version}-macos-arm64.zip", f"BubuZip-{version}-macos-arm64.dmg")
+          downloads = []
+          for name in (f"BubuZip-{version}-macos-arm64.dmg", f"BubuZip-{version}-windows-x64.zip"):
               url = f"https://github.com/{os.environ['GH_REPO']}/releases/download/v{os.environ['VERSION']}/{name}"
               if url not in body:
-                  windows_notes.append(f"- [{name}]({url})")
-          if windows_notes:
-              body += "\n\n## Windows 下载\n\n" + "\n".join(windows_notes)
+                  downloads.append(f"- [{name}]({url})")
+          if downloads:
+              body += "\n\n## 下载\n\n" + "\n".join(downloads)
+          support_note = "支持平台：macOS ARM64（Apple Silicon）和 Windows x64，均为 NativeAOT。"
+          if support_note not in body:
+              body += "\n\n" + support_note
           signing_note = "Windows 使用自签证书；完整解压 ZIP 后运行 BubuZip.exe。注册 Windows 11 一级右键菜单前，请按包内 Windows-Certificate.txt 手动信任 BubuZip.Signing.cer。自签不保证消除 SmartScreen 提示。"
           body = body.replace("当前 Windows 包未签名，Windows 11 一级右键菜单需另行使用受信任证书签名后注册。", "")
           if signing_note not in body:
@@ -415,6 +423,7 @@ jobs:
             # 正文列出下载链接，Release 底部 Assets 区也会自动展示全部附件。
             {
               printf '## 下载\n\n'
+              printf '支持平台：macOS ARM64（Apple Silicon）和 Windows x64，均为 NativeAOT。\n\n'
               for file in dist/*.dmg dist/*.zip; do
                 name="$(basename "$file")"
                 printf -- '- [%s](https://github.com/%s/releases/download/%s/%s)\n' "$name" "$GH_REPO" "$tag" "$name"

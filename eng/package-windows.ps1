@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('x64', 'arm64')][string]$Architecture = 'x64',
+    [ValidateSet('x64')][string]$Architecture = 'x64',
     [string]$OutputDirectory,
     [string]$Publisher = 'CN=BubuZip',
     [string]$CertificateThumbprint,

@@ -132,14 +132,14 @@ dotnet run --project src/BubuZip.Desktop -- --path "$HOME/Downloads" --shot out/
 
 离屏预览不打开桌面窗口；默认浅色，`--dark` 输出深色预览。有限帧启动与离屏预览分别用于检查窗口生命周期和布局；Core 与 UI 行为测试通过解决方案测试命令运行。窗口像素回归覆盖浅色、深色及 1 倍、2 倍设备缩放，检查连续帧和选择变化后的画面完整性与像素稳定性。
 
-可使用 .NET 发布 Windows 的 NativeAOT 目录和 Linux 的自包含目录（在项目根目录运行，目标运行时也可选择对应的 `win-arm64` 或 `linux-arm64`）：
+可使用 .NET 发布 Windows 的 NativeAOT 目录和 Linux 的自包含目录（在项目根目录运行，Windows 仅支持 `win-x64`，Linux 目标也可选择 `linux-arm64`）：
 
 ```bash
 dotnet publish src/BubuZip.Desktop -c Release -r win-x64 --self-contained true -p:BubuZipNativeAot=true -o out/windows-x64
 dotnet publish src/BubuZip.Desktop -c Release -r linux-x64 --self-contained true -o out/linux-x64
 ```
 
-Windows 11 一级右键菜单还需要原生扩展和稀疏身份包。在 Windows 上安装 Visual Studio C++ 工具、CMake 和 Windows SDK 后，用以下脚本发布完整目录（ARM64 使用 `-Architecture arm64`）：
+Windows 11 一级右键菜单还需要原生扩展和稀疏身份包。在 Windows 上安装 Visual Studio C++ 工具、CMake 和 Windows SDK 后，用以下脚本发布 x64 完整目录：
 
 ```powershell
 ./eng/package-windows.ps1 -Architecture x64
@@ -147,7 +147,7 @@ Windows 11 一级右键菜单还需要原生扩展和稀疏身份包。在 Windo
 
 Windows 打包脚本默认使用 NativeAOT；已有输出目录需传 `-Force`，新包构建并验证成功后才替换。输出包含 `BubuZip.exe`、`BubuZipShell.dll`、`BubuZip.ContextMenu.msix`、`resources.pri` 和 `Assets` 目录。仅运行 `dotnet publish` 不会构建菜单组件。`Assets` 和 `resources.pri` 必须与 `BubuZip.exe` 一起安装：稀疏包的清单图标按外部安装位置解析，图标缺失会显示空白；缺少明暗主题的无底板图标或资源索引，则可能出现系统添加的蓝色背景。打包脚本生成各尺寸的透明图标及资源索引，并同时收入菜单包和发布目录。默认 MSIX 尚未签名，不能注册一级菜单；发布时传入 `-Publisher 'CN=你的签名主体' -CertificateThumbprint '证书指纹'`，使用当前用户证书存储中相匹配的代码签名证书签名，或在后续发布流程中单独签名。目标系统必须信任签名证书。应用会报告注册错误，不会自动开启开发者模式、安装证书或更改安全策略。Windows 10 使用经典菜单，不需要身份包。
 
-Windows NativeAOT 包不附带 CoreCLR、托管程序集或调试符号；原生 DLL 仍需随包分发。Linux 发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/BubuZip`。Windows ARM64、Linux ARM64 的原生依赖需要在相应设备上单独验证。
+Windows NativeAOT 包不附带 CoreCLR、托管程序集或调试符号；原生 DLL 仍需随包分发。Linux 发布目录包含 .NET 运行时，但不捆绑上述 Linux 桌面组件或图形驱动。将 Linux 目录从 Windows 复制到 Linux 文件系统后，如执行权限未保留，可运行 `chmod +x out/linux-x64/BubuZip`。Linux ARM64 的原生依赖需要在相应设备上单独验证。
 
 ## 设置与系统右键菜单
 
@@ -205,19 +205,19 @@ dotnet run --project src/BubuZip.Desktop -- --settings --shot out/settings.png
 
 ## GitHub Actions 发布
 
-手动运行 `Release Windows and macOS` 工作流（`.github/workflows/release-macos.yml`），一次构建 Windows x64/ARM64 和 macOS Intel/Apple Silicon。四个包使用同一版本号，全部构建成功后才创建或更新同一个 GitHub Release，并生成覆盖全部附件的 `SHA256SUMS.txt`。关闭 `publish` 时只上传 Actions 产物，不创建 Release。
+手动运行 `Release Windows and macOS` 工作流（`.github/workflows/release-macos.yml`），一次构建 Windows x64 和 macOS ARM64（Apple Silicon）。两个包使用同一版本号，全部构建成功后才创建或更新同一个 GitHub Release，并生成覆盖全部附件的 `SHA256SUMS.txt`。关闭 `publish` 时只上传 Actions 产物，不创建 Release。
 
-Windows 提供 `BubuZip-版本号-windows-x64.zip` 和 `BubuZip-版本号-windows-arm64.zip`，包含 NativeAOT 程序、所需原生库、菜单组件及图标，无需安装 .NET；完整解压后运行 `BubuZip.exe`。使用固定自签证书给原生 EXE、菜单扩展 DLL 和菜单 MSIX 签名并添加时间戳，上传前验证签名、原生架构、必需文件和 ZIP 完整性，并拒绝混入托管程序集或 CoreCLR 文件。首次运行 CI 前，按 [Windows 自签配置](docs/windows-signing.md) 生成证书并配置两个 Actions Secrets。包内附公钥证书和安装说明；用户手动信任证书后再注册 Windows 11 一级右键菜单。自签不保证消除 SmartScreen 提示。ARM64 通过交叉编译生成，仍需在 ARM64 设备上验证运行。
+Windows 提供 `BubuZip-版本号-windows-x64.zip`，包含 NativeAOT 程序、所需原生库、菜单组件及图标，无需安装 .NET；完整解压后运行 `BubuZip.exe`。使用固定自签证书给原生 EXE、菜单扩展 DLL 和菜单 MSIX 签名并添加时间戳，上传前验证签名、原生架构、必需文件和 ZIP 完整性，并拒绝混入托管程序集或 CoreCLR 文件。首次运行 CI 前，按 [Windows 自签配置](docs/windows-signing.md) 生成证书并配置两个 Actions Secrets。包内附公钥证书和安装说明；用户手动信任证书后再注册 Windows 11 一级右键菜单。自签不保证消除 SmartScreen 提示。
 
 ## 打包 macOS 应用
 
-GitHub Actions 的 `Release Windows and macOS` 工作流为 Windows 和 macOS 的 x64、ARM64 均使用 NativeAOT。macOS 分别发布 Apple Silicon 和 Intel 的 `.dmg` 磁盘映像，不生成 macOS ZIP。打开 DMG 后，将 `BubuZip.app` 拖到 `Applications`（应用程序）即可安装。映像保留应用的执行权限和符号链接；上传前会挂载并验证包内应用，Release 同时提供 `SHA256SUMS.txt`。配置完整签名与公证凭据时，应用和 DMG 都会签名并公证。
+GitHub Actions 的 `Release Windows and macOS` 工作流为 Windows x64 和 macOS ARM64 均使用 NativeAOT。macOS 仅发布 Apple Silicon 的 `.dmg` 磁盘映像，不生成 macOS ZIP。打开 DMG 后，将 `BubuZip.app` 拖到 `Applications`（应用程序）即可安装。映像保留应用的执行权限和符号链接；上传前会挂载并验证包内应用，Release 同时提供 `SHA256SUMS.txt`。配置完整签名与公证凭据时，应用和 DMG 都会签名并公证。
 
 ```bash
 ./eng/package-macos.sh
 ```
 
-默认生成 `out/macos/BubuZip.app`，按本机架构进行 NativeAOT 编译并使用本地 ad hoc 签名。最低系统版本为 macOS 13。该签名用于本地验证；对外分发可透传 Developer ID 与可选公证参数：
+默认生成 `out/macos/BubuZip.app`，面向 ARM64（Apple Silicon）进行 NativeAOT 编译并使用本地 ad hoc 签名。最低系统版本为 macOS 13。该签名用于本地验证；对外分发可透传 Developer ID 与可选公证参数：
 
 ```bash
 ./eng/package-macos.sh \
@@ -229,14 +229,13 @@ GitHub Actions 的 `Release Windows and macOS` 工作流为 Windows 和 macOS �
 
 默认入口 `./eng/package-macos.sh`、Python 打包器及兼容入口 `./eng/package-macos-nativeaot.sh` 均使用 NativeAOT，输出到同一默认目录；`--publish-dir` 只接受已有的 NativeAOT 产物。应用包包含文件类型声明与访达扩展；扩展在签名和可选公证之前收入应用包。打包不会更改本机文件关联或自动启用访达扩展。
 
-可分别构建 Apple Silicon 和 Intel 版本：
+构建 Apple Silicon 版本：
 
 ```bash
 ./eng/package-macos.sh --rid osx-arm64
-./eng/package-macos.sh --rid osx-x64 --library-dir /path/to/intel/libraries
 ```
 
-每个版本需要相同架构的 SDL3、HarfBuzz 及其依赖。Intel 包应使用 Intel 原生库并在对应设备验收。输出已存在时，可传 `--force`，打包器会在新包验证成功后替换旧包。
+构建需要 ARM64 架构的 SDL3、HarfBuzz 及其依赖。输出已存在时，可传 `--force`，打包器会在新包验证成功后替换旧包。
 
 ## 目录
 
