@@ -203,6 +203,8 @@ dotnet run --project src/BubuZip.Desktop -- --settings --shot out/settings.png
 
 ## 打包 macOS 应用
 
+GitHub Actions 的 `Release macOS` 工作流分别发布 Apple Silicon 和 Intel 的 `.dmg` 磁盘映像，不生成供下载的 ZIP。打开 DMG 后，将 `BubuZip.app` 拖到 `Applications`（应用程序）即可安装。映像保留应用的执行权限和符号链接；上传前会挂载并验证包内应用，Release 同时提供 `SHA256SUMS.txt`。配置完整签名与公证凭据时，应用和 DMG 都会签名并公证。
+
 ```bash
 ./eng/package-macos.sh
 ```

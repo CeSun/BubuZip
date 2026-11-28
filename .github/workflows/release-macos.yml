@@ -1,4 +1,4 @@
-# macOS 发布工作流：手动触发构建、打包并发布 BubuZip.app。
+# macOS 发布工作流：手动触发构建，以 DMG 分发 BubuZip.app。
 #
 # 签名与公证（可选，全部缺省时使用 ad hoc 签名，仅供测试）：
 #   MACOS_CERTIFICATE_P12        Developer ID Application 证书（.p12）的 base64
@@ -165,17 +165,53 @@ jobs:
         if: steps.signing.outputs.notarize == 'true'
         run: spctl --assess --type execute --verbose=2 out/macos/BubuZip.app
 
-      - name: Archive app
+      - name: Create and verify DMG
+        id: dmg
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          RID: ${{ matrix.rid }}
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          NOTARIZE: ${{ steps.signing.outputs.notarize }}
         run: |
           mkdir -p dist
-          ditto -c -k --keepParent out/macos/BubuZip.app "dist/BubuZip-$VERSION-macos-${{ matrix.arch }}.zip"
+          dmg="$PWD/dist/BubuZip-$VERSION-macos-$ARCH.dmg"
+          staging="$(mktemp -d "$RUNNER_TEMP/bubuzip-dmg.XXXXXX")"
+          mount_point="$(mktemp -d "$RUNNER_TEMP/bubuzip-mount.XXXXXX")"
+          mounted=false
+          cleanup() {
+            if [[ "$mounted" == "true" ]]; then
+              hdiutil detach "$mount_point" || true
+            fi
+            rm -rf "$staging"
+            rmdir "$mount_point" || true
+          }
+          trap cleanup EXIT
+          # ditto 保留已签名应用的权限、扩展属性和符号链接。
+          ditto out/macos/BubuZip.app "$staging/BubuZip.app"
+          ln -s /Applications "$staging/Applications"
+          hdiutil create -volname BubuZip -srcfolder "$staging" -fs HFS+ -format UDRO "$dmg"
+          if [[ "$SIGN_IDENTITY" != "-" ]]; then
+            codesign --force --sign "$SIGN_IDENTITY" --timestamp "$dmg"
+          fi
+          if [[ "$NOTARIZE" == "true" ]]; then
+            xcrun notarytool submit "$dmg" --keychain-profile bubuzip-notary --wait
+            xcrun stapler staple "$dmg"
+            xcrun stapler validate "$dmg"
+          fi
+          hdiutil verify "$dmg"
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount_point"
+          mounted=true
+          python3 eng/package-macos.py --verify "$mount_point/BubuZip.app" --rid "$RID"
+          hdiutil detach "$mount_point"
+          mounted=false
+          echo "path=$dmg" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: bubuzip-macos-${{ matrix.arch }}
-          path: dist/*.zip
+          path: ${{ steps.dmg.outputs.path }}
+          # v7 可原样上传单个文件；产物名直接使用 DMG 文件名。
+          archive: false
           if-no-files-found: error
 
   release:
@@ -191,11 +227,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: bubuzip-macos-*
+          pattern: BubuZip-*-macos-*.dmg
           path: dist
           merge-multiple: true
+          skip-decompress: true
       - name: Generate checksums
-        run: cd dist && sha256sum *.zip > SHA256SUMS.txt
+        working-directory: dist
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: sha256sum "BubuZip-$VERSION-macos-arm64.dmg" "BubuZip-$VERSION-macos-x64.dmg" > SHA256SUMS.txt
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -203,16 +243,34 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           tag="v$VERSION"
+          notes="$RUNNER_TEMP/release-notes.md"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/* --clobber
+            gh release upload "$tag" dist/*.dmg dist/SHA256SUMS.txt --clobber
+            # 同版本重新发布时只更新旧下载链接，保留已有发布说明。
+            gh release view "$tag" --json body --jq '.body' > "$notes"
+            python3 - "$notes" <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          body = path.read_text(encoding="utf-8")
+          for arch in ("arm64", "x64"):
+              name = f"BubuZip-{os.environ['VERSION']}-macos-{arch}"
+              body = body.replace(name + ".zip", name + ".dmg")
+          path.write_text(body, encoding="utf-8")
+          PY
+            gh release edit "$tag" --notes-file "$notes"
           else
             # 正文列出下载链接，Release 底部 Assets 区也会自动展示全部附件。
-            body="## 下载"$'\n'
-            for file in dist/*.zip; do
-              name="$(basename "$file")"
-              body+="- [$name](https://github.com/$GH_REPO/releases/download/$tag/$name)"$'\n'
-            done
-            body+=$'\n'"校验和见 \`SHA256SUMS.txt\`。"
-            gh release create "$tag" dist/* --title "BubuZip $tag" \
-              --generate-notes --notes "$body" --target "$GITHUB_SHA"
+            {
+              printf '## 下载\n\n'
+              for file in dist/*.dmg; do
+                name="$(basename "$file")"
+                printf -- '- [%s](https://github.com/%s/releases/download/%s/%s)\n' "$name" "$GH_REPO" "$tag" "$name"
+              done
+              printf '\n打开 DMG 后，将 BubuZip.app 拖到 Applications（应用程序）即可安装。\n'
+              printf '\n校验和见 `SHA256SUMS.txt`。\n'
+            } > "$notes"
+            gh release create "$tag" dist/*.dmg dist/SHA256SUMS.txt --title "BubuZip $tag" \
+              --generate-notes --notes-file "$notes" --target "$GITHUB_SHA"
           fi
