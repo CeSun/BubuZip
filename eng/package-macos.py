@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package BubuZip with archive document declarations and its Finder Sync extension."""
+"""Package NativeAOT BubuZip with archive declarations and its Finder Sync extension."""
 import ctypes
 import json
 import os
@@ -50,6 +50,33 @@ ARCHIVE_TYPES = (
 
 def run(*arguments):
     subprocess.run([str(argument) for argument in arguments], check=True)
+
+
+def verify_nativeaot(directory):
+    forbidden = [path for path in directory.rglob("*") if path.name.endswith(
+        (".dll", ".runtimeconfig.json", ".deps.json", ".pdb", ".dbg", ".dwarf", ".dSYM"))
+        or path.name in {"libcoreclr.dylib", "libclrjit.dylib", "libhostfxr.dylib", "libhostpolicy.dylib"}]
+    if forbidden:
+        raise ValueError("NativeAOT payload contains managed runtime/debug files: " +
+                         ", ".join(str(path.relative_to(directory)) for path in forbidden))
+
+
+def prepare_nativeaot(options, temporary):
+    source = options.publish_dir
+    if source is None:
+        source = temporary / "publish"
+        run("dotnet", "publish", Path(options.project).expanduser().resolve(),
+            "-f", options.framework, "-c", options.configuration, "-r", options.rid,
+            "--self-contained", "true", "-p:BubuZipNativeAot=true", "-p:TrimmerSingleWarn=false",
+            "-o", source)
+    source = source.expanduser().resolve()
+    staging = temporary / "payload"
+    shutil.copytree(source, staging, symlinks=True,
+                    ignore=shutil.ignore_patterns("*.dSYM", "*.pdb", "*.dbg", "*.dwarf"))
+    if not (staging / options.executable).is_file():
+        raise ValueError("NativeAOT executable is missing")
+    verify_nativeaot(staging)
+    return staging
 
 
 def archive_metadata():
@@ -150,6 +177,7 @@ def verify_metadata(app):
 
 
 def verify_bundle(upstream, app, arch):
+    verify_nativeaot(app)
     plugin = verify_metadata(app)
     manifest = upstream.Bundle(app, arch).verify()
     run("codesign", "--verify", "--strict", plugin)
@@ -182,8 +210,7 @@ def sign_completed_bundle(app, identity, temporary):
         "--entitlements", FINDER_SOURCE / "FinderExtension.entitlements", plugin)
     entitlements = temporary / "application-entitlements.plist"
     with entitlements.open("wb") as stream:
-        plistlib.dump({"com.apple.security.cs.allow-jit": True,
-                      "com.apple.security.cs.disable-library-validation": True}, stream)
+        plistlib.dump({"com.apple.security.cs.disable-library-validation": True}, stream)
     run("codesign", "--force", "--sign", identity, "--options", "runtime", timestamp,
         "--entitlements", entitlements, app)
 
@@ -237,6 +264,7 @@ def package(upstream, options):
     with tempfile.TemporaryDirectory(prefix=".bubuzip-package-", dir=output.parent) as directory:
         temporary = Path(directory)
         app = temporary / output.name
+        options.publish_dir = prepare_nativeaot(options, temporary)
         run(*base_command(options, app))
         plugin = app / "Contents/PlugIns" / FINDER_NAME
         run(FINDER_SOURCE / "build.sh", "--rid", options.rid, "--output", plugin)

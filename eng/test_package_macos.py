@@ -146,6 +146,38 @@ class MetadataTests(unittest.TestCase):
 
 
 class OrchestrationTests(unittest.TestCase):
+    def test_default_publish_uses_aot_and_excludes_debug_symbols(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            selected = options(root, publish_dir=None)
+
+            def publish(*arguments):
+                self.assertEqual(arguments[:2], ("dotnet", "publish"))
+                self.assertIn("-p:BubuZipNativeAot=true", arguments)
+                self.assertNotIn("-p:PublishAot=true", arguments)
+                source = Path(arguments[arguments.index("-o") + 1])
+                source.mkdir()
+                (source / "BubuZip").write_bytes(b"native fixture")
+                (source / "libnative.dylib").write_bytes(b"native library")
+                (source / "BubuZip.dSYM").mkdir()
+                (source / "BubuZip.dSYM/symbols").write_text("symbols")
+                (source / "BubuZip.pdb").write_text("symbols")
+
+            with patch.object(packaging, "run", side_effect=publish):
+                payload = packaging.prepare_nativeaot(selected, root)
+            self.assertEqual({item.name for item in payload.iterdir()}, {"BubuZip", "libnative.dylib"})
+
+    def test_supplied_jit_publish_is_rejected(self):
+        for filename in ("BubuZip.dll", "BubuZip.runtimeconfig.json", "BubuZip.deps.json", "libcoreclr.dylib"):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                selected = options(root)
+                selected.publish_dir.mkdir()
+                (selected.publish_dir / "BubuZip").write_bytes(b"apphost")
+                (selected.publish_dir / filename).write_bytes(b"managed fixture")
+                with self.assertRaisesRegex(ValueError, "managed runtime/debug files"):
+                    packaging.prepare_nativeaot(selected, root)
+
     def test_upstream_command_cannot_notarize_or_replace_final_output(self):
         root = Path("/tmp/BubuZip $(literal)")
         selected = options(root, sign_identity="Developer ID Application: A $(literal)",
@@ -176,12 +208,14 @@ class OrchestrationTests(unittest.TestCase):
             self.assertIn("--timestamp", calls[0])
             self.assertIn("--timestamp", calls[1])
             with (root / "application-entitlements.plist").open("rb") as stream:
-                self.assertTrue(plistlib.load(stream)["com.apple.security.cs.allow-jit"])
+                self.assertNotIn("com.apple.security.cs.allow-jit", plistlib.load(stream))
 
     def test_final_verification_and_notarization_precede_output_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             selected = options(root, force=True, sign_identity="Developer ID Application: Test", notary_profile="profile")
+            selected.publish_dir.mkdir()
+            (selected.publish_dir / "BubuZip").write_bytes(b"native fixture")
             selected.output.mkdir()
             sentinel = selected.output / "previous-version"
             sentinel.write_text("old app")
@@ -227,6 +261,8 @@ class OrchestrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             selected = options(root, force=True)
+            selected.publish_dir.mkdir()
+            (selected.publish_dir / "BubuZip").write_bytes(b"native fixture")
             selected.output.mkdir()
             sentinel = selected.output / "previous-version"
             sentinel.write_text("old app")

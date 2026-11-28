@@ -15,9 +15,8 @@ $sdk = Get-ChildItem $sdkRoot -Directory |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 if (!$sdk) { throw 'Windows SDK signtool.exe is required.' }
 $signtool = Join-Path $sdk.FullName 'x64/signtool.exe'
-# Sign our own assemblies and native extension; preserve upstream signatures.
-$files = @('BubuZip.exe', 'BubuZip.dll', 'BubuZip.Core.dll', 'BubuZip.UI.dll',
-           'BubuZipShell.dll', 'BubuZip.ContextMenu.msix')
+# NativeAOT compiles our managed assemblies into the EXE. Preserve upstream DLLs.
+$files = @('BubuZip.exe', 'BubuZipShell.dll', 'BubuZip.ContextMenu.msix')
 foreach ($name in $files) {
     if (!(Test-Path -LiteralPath (Join-Path $output $name) -PathType Leaf)) {
         throw "Missing signing input: $name"

@@ -8,6 +8,9 @@
     <RootNamespace>BubuZip.Desktop</RootNamespace>
     <Description>BubuZip cross-platform desktop application.</Description>
     <ApplicationIcon>../../assets/icons/BubuZip.ico</ApplicationIcon>
+    <!-- Keep AOT scoped to the executable; a global PublishAot property also
+         reaches the netstandard source generator, which cannot be AOT-published. -->
+    <PublishAot Condition="'$(BubuZipNativeAot)' == 'true'">true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(PublishAot)' == 'true'">

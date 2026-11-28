@@ -42,7 +42,7 @@ $password = Get-Content -LiteralPath (Join-Path $signingDirectory 'BubuZip.Signi
 ```
 
 两个 Secret 配置完成后运行发布工作流。CI 将证书导入临时 runner 的个人证书存储，
-使用证书的 Subject 填写 MSIX Publisher，给 BubuZip EXE、自有 DLL 及菜单 MSIX
+使用证书的 Subject 填写 MSIX Publisher，给 NativeAOT 的 BubuZip.exe、BubuZipShell.dll 及菜单 MSIX
 添加 SHA256 签名和 RFC 3161 时间戳，核对签名、签名者和时间戳后再打 ZIP。
 完成或失败时清理导入的私钥。第三方运行库保留原状。
 

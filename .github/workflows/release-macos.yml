@@ -163,7 +163,7 @@ jobs:
           fi
           echo "notarize=$notarize" >> "$GITHUB_OUTPUT"
 
-      - name: Package BubuZip.app
+      - name: Package NativeAOT BubuZip.app
         env:
           RID: ${{ matrix.rid }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -178,6 +178,11 @@ jobs:
             fi
           fi
           ./eng/package-macos.sh "${args[@]}"
+
+      - name: Smoke test NativeAOT executable
+        run: |
+          out/macos/BubuZip.app/Contents/MacOS/BubuZip --help
+          out/macos/BubuZip.app/Contents/MacOS/BubuZip --shot "$RUNNER_TEMP/bubuzip-nativeaot.png"
 
       - name: Verify Gatekeeper assessment
         if: steps.signing.outputs.notarize == 'true'
@@ -284,7 +289,7 @@ jobs:
           } finally {
             if (Test-Path -LiteralPath $pfx) { Remove-Item -LiteralPath $pfx -Force }
           }
-      - name: Package Windows application and shell extension
+      - name: Package Windows NativeAOT application and shell extension
         env:
           ARCH: ${{ matrix.arch }}
           CERTIFICATE_THUMBPRINT: ${{ steps.windows-signing.outputs.thumbprint }}
@@ -292,6 +297,15 @@ jobs:
         run: |
           ./eng/package-windows.ps1 -Architecture $env:ARCH `
             -Publisher $env:CERTIFICATE_SUBJECT -CertificateThumbprint $env:CERTIFICATE_THUMBPRINT
+      - name: Smoke test NativeAOT executable
+        if: matrix.arch == 'x64'
+        run: |
+          $exe = Join-Path $PWD 'out/windows-x64/BubuZip.exe'
+          $preview = Join-Path $env:RUNNER_TEMP 'bubuzip-nativeaot.png'
+          $process = Start-Process -FilePath $exe -ArgumentList "--shot `"$preview`"" -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or !(Test-Path -LiteralPath $preview)) {
+            throw 'NativeAOT UI smoke test failed.'
+          }
       - name: Create and verify portable ZIP
         id: zip
         env:
@@ -301,8 +315,9 @@ jobs:
           $output = Join-Path $PWD "out/windows-$env:ARCH"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $zip = Join-Path $PWD "dist/BubuZip-$env:VERSION-windows-$env:ARCH.zip"
-          $required = @('BubuZip.exe', 'BubuZip.dll', 'BubuZip.Archive.ico', 'BubuZipShell.dll',
-                        'BubuZip.ContextMenu.msix', 'resources.pri', 'coreclr.dll', 'libHarfBuzzSharp.dll',
+          ./eng/verify-windows-nativeaot.ps1 -OutputDirectory $output -Architecture $env:ARCH
+          $required = @('BubuZip.exe', 'BubuZip.Archive.ico', 'BubuZipShell.dll',
+                        'BubuZip.ContextMenu.msix', 'resources.pri', 'libHarfBuzzSharp.dll',
                         'vello_ffi.dll', 'vello_sparse_ffi.dll', 'Assets/StoreLogo.png',
                         'BubuZip.Signing.cer', 'Windows-Certificate.txt', 'Windows-Certificate-Fingerprint.txt',
                         'Assets/Square44x44Logo.png', 'Assets/Square150x150Logo.png',
