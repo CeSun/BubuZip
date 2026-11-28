@@ -201,9 +201,15 @@ dotnet run --project src/BubuZip.Desktop -- --settings --shot out/settings.png
 
 流式引擎只读写调用者提供的流；同项目中的 `ArchiveFileService` 负责实际磁盘文件枚举、创建、提取、读取测试、路径预检、冲突处理和直接写入，`ArchiveEditService` 负责原包修改。UI 调用文件服务并显示操作状态。版本及接口边界见 [架构说明](docs/architecture.md)。
 
+## GitHub Actions 发布
+
+手动运行 `Release Windows and macOS` 工作流（`.github/workflows/release-macos.yml`），一次构建 Windows x64/ARM64 和 macOS Intel/Apple Silicon。四个包使用同一版本号，全部构建成功后才创建或更新同一个 GitHub Release，并生成覆盖全部附件的 `SHA256SUMS.txt`。关闭 `publish` 时只上传 Actions 产物，不创建 Release。
+
+Windows 提供 `BubuZip-版本号-windows-x64.zip` 和 `BubuZip-版本号-windows-arm64.zip`，包含自包含 .NET 运行时、菜单组件及图标；完整解压后运行 `BubuZip.exe`。使用固定自签证书给程序、自有 DLL 和菜单 MSIX 签名并添加时间戳，上传前验证签名、必需文件和 ZIP 完整性。首次运行 CI 前，按 [Windows 自签配置](docs/windows-signing.md) 生成证书并配置两个 Actions Secrets。包内附公钥证书和安装说明；用户手动信任证书后再注册 Windows 11 一级右键菜单。自签不保证消除 SmartScreen 提示。ARM64 通过交叉编译生成，仍需在 ARM64 设备上验证运行。
+
 ## 打包 macOS 应用
 
-GitHub Actions 的 `Release macOS` 工作流分别发布 Apple Silicon 和 Intel 的 `.dmg` 磁盘映像，不生成供下载的 ZIP。打开 DMG 后，将 `BubuZip.app` 拖到 `Applications`（应用程序）即可安装。映像保留应用的执行权限和符号链接；上传前会挂载并验证包内应用，Release 同时提供 `SHA256SUMS.txt`。配置完整签名与公证凭据时，应用和 DMG 都会签名并公证。
+GitHub Actions 的 `Release Windows and macOS` 工作流为 macOS 分别发布 Apple Silicon 和 Intel 的 `.dmg` 磁盘映像，不生成 macOS ZIP。打开 DMG 后，将 `BubuZip.app` 拖到 `Applications`（应用程序）即可安装。映像保留应用的执行权限和符号链接；上传前会挂载并验证包内应用，Release 同时提供 `SHA256SUMS.txt`。配置完整签名与公证凭据时，应用和 DMG 都会签名并公证。
 
 ```bash
 ./eng/package-macos.sh

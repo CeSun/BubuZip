@@ -7,6 +7,9 @@ TestResults/
 .vs/
 *.user
 *.suo
+*.pfx
+*.p12
+*.password.dpapi
 .DS_Store
 .workbuddy/
 src/BubuZip.Desktop/Properties/PublishProfiles/

@@ -1,0 +1,20 @@
+BubuZip Windows 自签证书说明
+
+本测试发行版使用自签证书。Windows 默认不信任此证书；签名不保证消除
+SmartScreen 或 Smart App Control 的提示。请仅在确认发行来源后信任它。
+证书指纹见 Windows-Certificate-Fingerprint.txt，可与 GitHub Actions
+对应版本的构建日志核对。包内仅提供公钥证书，不包含签名私钥。
+
+Windows 11 一级右键菜单需要先信任证书，再在 BubuZip 设置中注册菜单。
+在完整解压的目录中打开管理员 PowerShell，执行：
+
+  Import-Certificate -FilePath .\BubuZip.Signing.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+
+也可双击 BubuZip.Signing.cer，选择“安装证书”→“本地计算机”→
+“将所有的证书都放入下列存储”→“受信任的人”。不要选择“受信任的根证书颁发机构”。
+导入后打开 BubuZip.exe，在设置中点击“注册右键菜单”。
+此操作会让本机信任由该证书签名的软件；仅需为同一证书执行一次。
+如果证书更换，需要重新核对并信任新证书。程序不会自动安装证书或更改安全策略。
+
+撤销：先在 BubuZip 设置中移除右键菜单，再运行 certlm.msc，打开
+“受信任的人”→“证书”，核对指纹后删除对应的 BubuZip 证书。
