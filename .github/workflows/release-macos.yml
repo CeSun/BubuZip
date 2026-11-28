@@ -302,10 +302,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $zip = Join-Path $PWD "dist/BubuZip-$env:VERSION-windows-$env:ARCH.zip"
           $required = @('BubuZip.exe', 'BubuZip.dll', 'BubuZip.Archive.ico', 'BubuZipShell.dll',
-                        'BubuZip.ContextMenu.msix', 'coreclr.dll', 'libHarfBuzzSharp.dll',
+                        'BubuZip.ContextMenu.msix', 'resources.pri', 'coreclr.dll', 'libHarfBuzzSharp.dll',
                         'vello_ffi.dll', 'vello_sparse_ffi.dll', 'Assets/StoreLogo.png',
                         'BubuZip.Signing.cer', 'Windows-Certificate.txt', 'Windows-Certificate-Fingerprint.txt',
-                        'Assets/Square44x44Logo.png', 'Assets/Square150x150Logo.png')
+                        'Assets/Square44x44Logo.png', 'Assets/Square150x150Logo.png',
+                        'Assets/Square44x44Logo.targetsize-32_altform-unplated.png',
+                        'Assets/Square44x44Logo.targetsize-32_altform-lightunplated.png')
           foreach ($file in $required) {
             if (!(Test-Path -LiteralPath (Join-Path $output $file) -PathType Leaf)) {
               throw "Missing Windows package file: $file"
