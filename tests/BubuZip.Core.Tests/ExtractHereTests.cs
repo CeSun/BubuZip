@@ -358,12 +358,12 @@ public sealed class ExtractHereTests : IDisposable
     }
 
     [Fact]
-    public async Task SymbolicLinkArchiveEntriesAreRejectedBeforeAnyOutputIsCommitted()
+    public async Task EscapingSymbolicLinksAreRejectedBeforeAnyOutputIsCommitted()
     {
         var archive = WriteZip(("placeholder.txt", "data"));
         var service = new ArchiveFileService(new SymlinkEntryEngine());
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.ExtractHereAsync(archive, _root));
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.ExtractHereAsync(archive, _root));
 
         Assert.Equal(new[] { archive }, Directory.EnumerateFileSystemEntries(_root));
         AssertNoStaging();

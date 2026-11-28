@@ -170,10 +170,13 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var attributes = ReadAttributes(entry);
+                var symbolicLink = archive.Type == ArchiveType.Zip && attributes is int flags &&
+                    ((unchecked((uint)flags) >> 16) & 0xF000u) == 0xA000u;
+                var linkTarget = symbolicLink
+                    ? await ReadZipLinkTargetAsync(entry, cancellationToken).ConfigureAwait(false)
+                    : entry.LinkTarget;
                 entries.Add(new ArchiveEntryInfo(EntryName(entry, archive.Type, source), entry.Size, entry.IsDirectory, entry.IsEncrypted,
-                    entry.LinkTarget, entry.LastModifiedTime, entry.CompressedSize,
-                    entry.LinkTarget is not null || archive.Type == ArchiveType.Zip && attributes is int flags &&
-                        ((unchecked((uint)flags) >> 16) & 0xF000u) == 0xA000u, attributes));
+                    linkTarget, entry.LastModifiedTime, entry.CompressedSize, symbolicLink, attributes));
             }
 
             return entries;
@@ -385,6 +388,27 @@ public sealed partial class SharpCompressArchiveEngine : IBatchArchiveEngine, IC
             return ~crc;
         }
         finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+    }
+
+    private static async Task<string> ReadZipLinkTargetAsync(IArchiveEntry entry, CancellationToken token)
+    {
+        // ZIP stores a Unix symlink's target as its file data. Bound the decoded data,
+        // not only the advertised size, and verify its CRC before trusting the target.
+        const int limit = 32768;
+        if (entry.IsDirectory || entry.Size is <= 0 or > limit)
+            throw new InvalidDataException($"Invalid ZIP symbolic link: {entry.Key}");
+        using var output = new MemoryStream(new byte[limit], writable: true);
+        output.SetLength(0);
+        try
+        {
+            await entry.WriteToAsync(output, new ExtractionOptions { CheckCrc = true },
+                cancellationToken: token).ConfigureAwait(false);
+            return new UTF8Encoding(false, true).GetString(output.ToArray());
+        }
+        catch (Exception error) when (error is NotSupportedException or DecoderFallbackException)
+        {
+            throw new InvalidDataException($"Invalid ZIP symbolic link target: {entry.Key}", error);
+        }
     }
 
     private static int? ReadAttributes(IEntry entry)

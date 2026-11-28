@@ -184,6 +184,10 @@ public sealed class ArchiveEditService(IArchiveEngine engine, ArchiveFileService
                         creators[NormalizePath(metadata[index].EntryPath)] = headers[index].Creator;
                 }
             }
+            // Extraction now supports safe file links, but rebuilding still cannot
+            // preserve their semantics when entries are renamed or removed.
+            if (metadata.Any(entry => entry.IsSymbolicLink || entry.LinkTarget is not null))
+                throw new NotSupportedException("暂不支持编辑包含链接的压缩包，以免重写后改变链接目标。");
             if (format == ArchiveFormat.Zip && metadata.Any(entry => entry.IsEncrypted))
                 throw new NotSupportedException("当前不能编辑加密 ZIP，以免重写后丢失密码保护。");
             if (format == ArchiveFormat.SevenZip && metadata.Any(entry => entry.IsEncrypted) && password is null)

@@ -310,7 +310,7 @@ public sealed class ArchiveFileServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ArchiveLinksAreRejectedBeforeCreatingAnOutput()
+    public async Task EscapingArchiveLinksAreRejectedBeforeCreatingAnOutput()
     {
         var archive = Path.Combine(_root, "link.zip");
         await using (var file = File.Create(archive))
@@ -323,7 +323,7 @@ public sealed class ArchiveFileServiceTests : IDisposable
         }
         var output = Path.Combine(_root, "unpacked");
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => _service.ExtractAsync(archive, output));
+        await Assert.ThrowsAsync<InvalidDataException>(() => _service.ExtractAsync(archive, output));
 
         Assert.False(Directory.Exists(output));
         AssertNoTemporaryOutputs();

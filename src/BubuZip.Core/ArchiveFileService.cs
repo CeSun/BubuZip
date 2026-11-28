@@ -110,7 +110,11 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
             var completed = 0;
             foreach (var entry in entries.Where(entry => entry.Info.IsDirectory))
                 progress?.Report(new(entry.RelativePath, ++completed, entries.Count));
-            var files = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
+            // Link payloads were CRC-checked while reading the plan; never ask the
+            // content extractor to treat them as ordinary files.
+            foreach (var entry in entries.Where(entry => entry.LinkTargetPath is not null))
+                progress?.Report(new(entry.RelativePath, ++completed, entries.Count));
+            var files = entries.Where(entry => !entry.Info.IsDirectory && entry.LinkTargetPath is null).ToArray();
             if (_engine is IBatchArchiveEngine batch)
             {
                 var byKey = files.ToDictionary(entry => EntryKey(entry.Info.EntryPath), StringComparer.Ordinal);
@@ -187,7 +191,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
                 Directory.SetLastWriteTimeUtc(extra.Target, modified.ToUniversalTime());
         }
 
-        var files = entries.Where(entry => !entry.Info.IsDirectory).ToArray();
+        var files = entries.Where(entry => !entry.Info.IsDirectory && entry.LinkTargetPath is null).ToArray();
         Stream OpenTarget(PlannedEntry entry)
         {
             var placement = plan.Files[entry.RelativePath];
@@ -227,6 +231,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
         }
         foreach (var entry in files.Where(entry => entry.Info.LastModified is not null && plan.Files[entry.RelativePath].Target is not null))
             File.SetLastWriteTimeUtc(plan.Files[entry.RelativePath].Target!, entry.Info.LastModified!.Value.ToUniversalTime());
+        await CreateLinksAsync(entries, plan, tracker, cancellationToken, beforeEntry).ConfigureAwait(false);
         foreach (var pair in plan.Directories.Where(pair => pair.Value.Modified is not null)
                      .OrderByDescending(pair => pair.Value.Target.Length))
             Directory.SetLastWriteTimeUtc(pair.Value.Target, pair.Value.Modified!.Value.ToUniversalTime());
@@ -237,11 +242,26 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
         var metadata = await _engine.ListAsync(source, password, cancellationToken).ConfigureAwait(false);
         var entries = metadata.Select(entry =>
         {
-            if (entry.IsSymbolicLink || entry.LinkTarget is not null)
-                throw new NotSupportedException($"Archive links are not supported: {entry.EntryPath}");
+            // Other handlers may expose hard links through LinkTarget too. Do not
+            // interpret those using ZIP's relative symbolic-link semantics.
+            if (entry.LinkTarget is not null && !entry.IsSymbolicLink)
+                throw new NotSupportedException($"This archive link type is not supported: {entry.EntryPath}");
+            if (entry.IsSymbolicLink && (entry.IsDirectory || string.IsNullOrEmpty(entry.LinkTarget)))
+                throw new InvalidDataException($"Invalid archive symbolic link: {entry.EntryPath}");
             return new PlannedEntry(entry, NormalizeEntryPath(entry.EntryPath));
         }).ToList();
         ValidateEntryTree(entries.Select(entry => (entry.RelativePath, entry.Info.IsDirectory)));
+        var paths = entries.ToDictionary(entry => entry.RelativePath, StringComparer.Ordinal);
+        var directories = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            var parts = entry.RelativePath.Split('/');
+            for (var index = 1; index < parts.Length; index++) directories.Add(string.Join('/', parts.Take(index)));
+            if (entry.Info.IsDirectory) directories.Add(entry.RelativePath);
+        }
+        entries = entries.Select(entry => entry.Info.IsSymbolicLink
+            ? entry with { LinkTargetPath = ResolveArchiveLink(entry, paths, directories) } : entry).ToList();
+        _ = OrderLinks(entries);
         return entries;
     }
 
@@ -282,6 +302,13 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
             mapped.Add(entry with { RelativePath = path });
         }
         ValidateEntryTree(mapped.Select(entry => (entry.RelativePath, entry.Info.IsDirectory)));
+        var selectedPaths = mapped.ToDictionary(entry => NormalizeEntryPath(entry.Info.EntryPath),
+            entry => entry.RelativePath, StringComparer.Ordinal);
+        mapped = mapped.Select(entry => entry.LinkTargetPath is { } target
+            ? entry with { LinkTargetPath = selectedPaths.TryGetValue(target, out var mappedTarget) ? mappedTarget
+                : throw new InvalidDataException($"链接目标未包含在本次解压选择中：{entry.Info.EntryPath} → {target}") }
+            : entry).ToList();
+        _ = OrderLinks(mapped);
         return mapped;
     }
 
@@ -347,9 +374,9 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var normalized = path.Replace('\\', '/').TrimEnd('/').Normalize(NormalizationForm.FormC);
-        if (normalized.Length == 0 || normalized.StartsWith('/') || normalized.Contains('\0') ||
-            (normalized.Length > 1 && normalized[1] == ':') ||
-            normalized.Split('/').Any(part => part is "" or "." or ".."))
+        if (normalized.Length == 0 || normalized.StartsWith('/') || normalized.Contains('\0') || normalized.Contains(':') ||
+            normalized.Split('/').Any(part => part is "" or "." or ".." ||
+                OperatingSystem.IsWindows() && (part.EndsWith('.') || part.EndsWith(' '))))
             throw new InvalidDataException($"Unsafe archive entry path: {path}");
         return normalized;
     }
@@ -378,7 +405,7 @@ public sealed partial class ArchiveFileService(IArchiveEngine engine)
     }
 
     private sealed record SourceEntry(string FilePath, string EntryPath, bool IsDirectory, DateTime LastModified);
-    private sealed record PlannedEntry(ArchiveEntryInfo Info, string RelativePath);
+    private sealed record PlannedEntry(ArchiveEntryInfo Info, string RelativePath, string? LinkTargetPath = null);
 
     // Open one file at a time rather than holding a file descriptor for every selected file.
     private sealed class SourceFileStream(string filePath, Action completed, Action? checkpoint = null, Action<long>? advanced = null) : Stream

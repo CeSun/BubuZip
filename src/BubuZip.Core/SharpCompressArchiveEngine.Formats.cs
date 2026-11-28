@@ -55,7 +55,7 @@ public sealed partial class SharpCompressArchiveEngine
             try { size = entry.Size; }
             catch (NotImplementedException) { size = 0; }
             entries.Add(new(entry.Key ?? "", size, entry.IsDirectory, entry.IsEncrypted, entry.LinkTarget,
-                entry.LastModifiedTime, entry.CompressedSize, entry.LinkTarget is not null, attributes));
+                entry.LastModifiedTime, entry.CompressedSize, false, attributes));
         }
         return entries;
     }
